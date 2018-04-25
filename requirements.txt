@@ -1,0 +1,2 @@
+kubernetes==3.0.0a1
+statsd==3.2.1

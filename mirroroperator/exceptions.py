@@ -1,0 +1,2 @@
+class NoCRDException(Exception):
+    pass

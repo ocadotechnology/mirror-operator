@@ -11,9 +11,10 @@ LOGGER = logging.getLogger(__name__)
 
 
 class RegistryMirror(object):
-    def __init__(self, namespace, event_type, **kwargs):
+    def __init__(self, event_type, namespace, mirror_hostess_image, **kwargs):
         self.event_type = event_type
         self.namespace = namespace
+        self.mirror_hostess_image= mirror_hostess_image
         self.kind = kwargs.get("kind")
         self.name = kwargs.get("metadata", {}).get("name")
         self.uid = kwargs.get("metadata", {}).get("uid")
@@ -22,10 +23,15 @@ class RegistryMirror(object):
         self.apiVersion = kwargs.get("apiVersion")
         self.upstreamUrl = kwargs.get("spec", {}).get("upstreamUrl")
         self.credentials_secret_name = kwargs.get("spec", {}).get("credentialsSecret")
+        self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
+        self.secret_name = kwargs["secret_name"]
+        self.ocado_cert_name = kwargs["ocado_cert_name"]
+
         self.labels = {
             "app": "docker-registry",
             "mirror": self.name,
         }
+
         self.metadata = client.V1ObjectMeta(
             namespace=self.namespace,
             name=self.full_name,
@@ -128,7 +134,7 @@ class RegistryMirror(object):
                                     client.V1EnvVar(name="HOSTS_FILE_BACKUP",
                                                     value="/etc/hosts.backup/hosts")
                                 ],
-                                image="releases.docker.ospcfc.tech.lastmile.com/kubernetes/mirror-hostess:1.0.3@sha256:39c92575f99d7aa1ac5f8c703cda6665c93dae512180f4c2764f71976be3b18b",
+                                image=self.mirror_hostess_image,
                                 image_pull_policy="Always",
                                 resources=client.V1ResourceRequirements(
                                     requests={"memory": "32Mi", "cpu": "0.001"},
@@ -159,7 +165,7 @@ class RegistryMirror(object):
                                     "-u",
                                     "-x"
                                 ],
-                                image="hub.docker.tech.lastmile.com/library/alpine:3.5",
+                                image="alpine:3.5",
                                 image_pull_policy="Always",
                                 resources=client.V1ResourceRequirements(
                                     requests={"memory": "1Mi", "cpu": "0.001"},
@@ -174,7 +180,8 @@ class RegistryMirror(object):
                                 ],
                             )
                         ],
-                        image_pull_secrets=[{"name": "releases.docker.ospcfc.tech.lastmile.com"}],
+                        image_pull_secrets=[{"name": name} for name in
+                                            self.image_pull_secrets.split(",")],
                         service_account_name="mirror-hostess",
                         termination_grace_period_seconds=2,
                         volumes=[client.V1Volume(
@@ -204,7 +211,7 @@ class RegistryMirror(object):
                             client.V1Volume(
                                 name="tls",
                                 secret=client.V1SecretVolumeSource(
-                                    secret_name="wildcard.docker.tech.lastmile.com"
+                                    secret_name=self.secret_name
                                 )
                             )
                         ]
@@ -325,6 +332,25 @@ class RegistryMirror(object):
         stateful_set.spec.replicas = 2
         pod_labels = {'component': 'registry'}
         pod_labels.update(self.labels)
+        volumes = []
+        if self.ocado_cert_name:
+            volumes = [
+                client.V1Volume(
+                    name=self.ocado_cert_name,
+                    config_map=client.V1ConfigMapVolumeSource(
+                        name=self.ocado_cert_name
+                    )
+                )
+            ]
+        if self.secret_name:
+            volumes.append(
+                client.V1Volume(
+                    name="tls",
+                    secret=client.V1SecretVolumeSource(
+                        secret_name=self.secret_name
+                    ),
+                )
+            )
         stateful_set.spec.template = client.V1PodTemplateSpec(
                     metadata=client.V1ObjectMeta(
                         labels=pod_labels
@@ -333,7 +359,7 @@ class RegistryMirror(object):
                         init_containers=[
                             client.V1Container(
                                 name="validate-state-file",
-                                image="hub.docker.tech.lastmile.com/python:3.6-alpine",
+                                image="python:3.6-alpine3.7",
                                 env=[
                                     client.V1EnvVar(
                                         name="STATE_FILE",
@@ -361,7 +387,7 @@ class RegistryMirror(object):
                         containers=[
                             client.V1Container(
                                 name="registry",
-                                image="hub.docker.tech.lastmile.com/library/registry:2.6.0",
+                                image="registry:2.6.0",
                                 env=env,
                                 readiness_probe=client.V1Probe(
                                     http_get=client.V1HTTPGetAction(
@@ -388,11 +414,6 @@ class RegistryMirror(object):
                                         mount_path="/var/lib/registry"
                                     ),
                                     client.V1VolumeMount(
-                                        name="lastmile-cert",
-                                        mount_path="/etc/ssl/certs",
-                                        read_only=True
-                                    ),
-                                    client.V1VolumeMount(
                                         name="tls",
                                         mount_path="/etc/registry-certs",
                                         read_only=True
@@ -401,20 +422,7 @@ class RegistryMirror(object):
                             )
                         ],
                         termination_grace_period_seconds=10,
-                        volumes=[
-                            client.V1Volume(
-                                name="lastmile-cert",
-                                config_map=client.V1ConfigMapVolumeSource(
-                                    name="lastmile-cert"
-                                )
-                            ),
-                            client.V1Volume(
-                                name="tls",
-                                secret=client.V1SecretVolumeSource(
-                                    secret_name="wildcard.docker.tech.lastmile.com"
-                                ),
-                            ),
-                        ],
+                        volumes=volumes or None,
                     )
                 )
         stateful_set.spec.update_strategy = client.V1beta1StatefulSetUpdateStrategy(

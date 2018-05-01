@@ -16,8 +16,15 @@ CRD_PLURAL = "registrymirrors"
 
 
 class MirrorOperator(object):
-    def __init__(self, namespace):
-        self.namespace = namespace
+    def __init__(self, env_vars):
+        """
+        :param env_vars: dictionary includes namespace,
+            mirror_hostess_image(used in RegistryMirror),
+            image_pull_secrets(used in RegistryMirror, optional),
+            secret_name(optional),
+            ocado_cert_name(optional)
+        """
+        self.registry_mirror_vars = env_vars
         kubernetes.config.load_incluster_config()
         self.crd_api = kubernetes.client.ExtensionsV1beta1Api()
         self.object_api = kubernetes.client.CustomObjectsApi()
@@ -26,7 +33,9 @@ class MirrorOperator(object):
         watcher = kubernetes.watch.Watch()
         try:
             for event in watcher.stream(self.object_api.list_cluster_custom_object, CRD_GROUP, CRD_VERSION, CRD_PLURAL):
-                mirror = RegistryMirror(namespace=self.namespace, event_type=event['type'], **event['object'])
+                registry_mirror_kwargs = event['object'].copy()
+                registry_mirror_kwargs.update(self.registry_mirror_vars)
+                mirror = RegistryMirror(event_type=event['type'], **registry_mirror_kwargs)
                 mirror.apply()
         except ApiException as e:
             status = HTTPStatus(e.status)
@@ -39,9 +48,22 @@ class MirrorOperator(object):
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
-    namespace = os.environ.get("NAMESPACE", "kube-extra")
+
+    # Get organization specific variables from env
+    env_vars = dict(
+        namespace=os.environ.get("NAMESPACE", "kube-extra"),
+        # needed
+        mirror_hostess_image=os.environ.get("MIRROR_HOSTESS_IMAGE"),
+        # optional in V1PodSpec secrets split with comma
+        image_pull_secrets=os.environ.get("IMAGE_PULL_SECRETS"),
+        # ocado specific secret
+        secret_name=os.environ.get("SECRET_NAME"),
+        # needed in ocado clusters
+        ocado_cert_name=os.environ.get("OCADO_CERT_NAME"),
+    )
+    operator = MirrorOperator(env_vars)
+
     sleep_time = os.environ.get("SECONDS_BETWEEN_STREAMS", 30)
-    operator = MirrorOperator(namespace)
     while True:
         operator.watch_registry_mirrors()
         LOGGER.info("API closed connection or CRD does not exist, sleeping for %i seconds", sleep_time)

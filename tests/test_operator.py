@@ -20,7 +20,14 @@ responses = Responses('urllib3')
 class OperatorTestCase(KubernetesTestCase):
     def setUp(self):
         super().setUp()
-        self.operator = MirrorOperator("kube-extra")
+        env_var_dict = {
+            "namespace": "kube-extra",
+            "mirror_hostess_image": "some-public-mirror-hostess-image",
+            "image_pull_secrets": None,
+            "secret_name": None,
+            "ocado_cert_name": None,
+        }
+        self.operator = MirrorOperator(env_var_dict)
 
     @responses.activate
     def test_will_read_crds_blanks_already_exist(self):

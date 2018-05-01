@@ -4,6 +4,7 @@ from tests.kubernetes_mock_responses import *
 from urllib3_mock import Responses
 import kubernetes
 import json
+from copy import deepcopy
 responses = Responses('urllib3')
 
 
@@ -11,9 +12,23 @@ responses = Responses('urllib3')
 class CustomResourceTestCase(KubernetesTestCase):
     def setUp(self):
         super().setUp()
-        self.mirror = RegistryMirror("kube-extra", "CREATED",
-                                     **{"metadata": {"name": "hub"},
-                                      "spec": {"upstreamUrl": "hubtest"}})
+        self.env_var_dict = {
+            "namespace": "kube-extra",
+            "mirror_hostess_image": "some-public-mirror-hostess-image",
+            "image_pull_secrets": None,
+            "secret_name": None,
+            "ocado_cert_name": None,
+        }
+        registry_kwargs = {"metadata": {"name": "hub"},
+                           "spec": {"upstreamUrl": "hubtest"}}
+        registry_kwargs.update(self.env_var_dict)
+        self.mirror = RegistryMirror(event_type="CREATED", **registry_kwargs)
+
+        registry_kwargs_with_credential_secret = deepcopy(registry_kwargs)
+        registry_kwargs_with_credential_secret['spec']["credentialsSecret"] = "internal-mirror"
+        registry_kwargs_with_credential_secret.update(self.env_var_dict)
+        self.mirror_with_credential_secret = RegistryMirror(
+            event_type="CREATED", **registry_kwargs_with_credential_secret)
 
     @responses.activate
     def test_update_service_neither_exist(self):
@@ -21,7 +36,6 @@ class CustomResourceTestCase(KubernetesTestCase):
         responses.add('POST', '/api/v1/namespaces/kube-extra/services', body=EMPTY_SERVICE)
         self.mirror.update_services(None, None)
         self.check_calls(('POST', 'POST'), responses.calls, self.mirror.metadata)
-
 
     @responses.activate
     def test_update_service_one_exists(self):
@@ -88,11 +102,7 @@ class CustomResourceTestCase(KubernetesTestCase):
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/internal-mirror', body=VALID_SECRET)
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/registry-mirror-hub', body=VALID_SECRET)
         responses.add('PUT', '/api/v1/namespaces/kube-extra/secrets/registry-mirror-hub', body=VALID_REG_SECRET)
-        mirror = RegistryMirror("kube-extra", "CREATED",
-                                     **{"metadata": {"name": "hub"},
-                                        "spec": {"upstreamUrl": "hubtest",
-                                                 "credentialsSecret": "internal-mirror"}})
-        mirror.update_stateful_set(None)
+        self.mirror_with_credential_secret.update_stateful_set(None)
         statefulset_request, stateful_resp = responses.calls[3]
         secret_request, secret_resp = responses.calls[2]
         statefulset_json = json.loads(statefulset_request.body)
@@ -109,11 +119,7 @@ class CustomResourceTestCase(KubernetesTestCase):
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/internal-mirror', body=VALID_SECRET)
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/registry-mirror-hub', status=404)
         responses.add('POST', '/api/v1/namespaces/kube-extra/secrets', body=VALID_REG_SECRET)
-        mirror = RegistryMirror("kube-extra", "CREATED",
-                                     **{"metadata": {"name": "hub"},
-                                        "spec": {"upstreamUrl": "hubtest",
-                                                 "credentialsSecret": "internal-mirror"}})
-        mirror.update_stateful_set(None)
+        self.mirror_with_credential_secret.update_stateful_set(None)
         statefulset_request, stateful_resp = responses.calls[3]
         statefulset_json = json.loads(statefulset_request.body)
         self.assertEqual(None, statefulset_json['spec']['template']['spec']['containers'][0]['env'][4].get('value'))
@@ -126,11 +132,7 @@ class CustomResourceTestCase(KubernetesTestCase):
         responses.add('POST', '/apis/apps/v1beta1/namespaces/kube-extra/statefulsets', body=EMPTY_STATEFUL_SET)
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/internal-mirror', status=404)
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/registry-mirror-hub', status=404, body='')
-        mirror = RegistryMirror("kube-extra", "CREATED",
-                                **{"metadata": {"name": "hub"},
-                                   "spec": {"upstreamUrl": "hubtest",
-                                            "credentialsSecret": "internal-mirror"}})
-        mirror.update_stateful_set(None)
+        self.mirror_with_credential_secret.update_stateful_set(None)
         statefulset_request, stateful_resp = responses.calls[2]
         statefulset_json = json.loads(statefulset_request.body)
         self.assertEqual("https://hubtest",
@@ -142,11 +144,7 @@ class CustomResourceTestCase(KubernetesTestCase):
         responses.add('POST', '/apis/apps/v1beta1/namespaces/kube-extra/statefulsets', body=EMPTY_STATEFUL_SET)
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/internal-mirror', body=INVALID_SECRET)
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/registry-mirror-hub', status=404, body='')
-        mirror = RegistryMirror("kube-extra", "CREATED",
-                                **{"metadata": {"name": "hub"},
-                                   "spec": {"upstreamUrl": "hubtest",
-                                            "credentialsSecret": "internal-mirror"}})
-        mirror.update_stateful_set(None)
+        self.mirror_with_credential_secret.update_stateful_set(None)
         statefulset_request, stateful_resp = responses.calls[2]
         statefulset_json = json.loads(statefulset_request.body)
         self.assertEqual("https://hubtest",
@@ -159,11 +157,7 @@ class CustomResourceTestCase(KubernetesTestCase):
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/internal-mirror', status=404, body='')
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/registry-mirror-hub', body=VALID_REG_SECRET)
         responses.add('PUT', '/api/v1/namespaces/kube-extra/secrets/registry-mirror-hub', body=VALID_REG_SECRET)
-        mirror = RegistryMirror("kube-extra", "CREATED",
-                                **{"metadata": {"name": "hub"},
-                                   "spec": {"upstreamUrl": "hubtest",
-                                            "credentialsSecret": "internal-mirror"}})
-        mirror.update_stateful_set(None)
+        self.mirror_with_credential_secret.update_stateful_set(None)
         statefulset_request, stateful_resp = responses.calls[2]
         statefulset_json = json.loads(statefulset_request.body)
         self.assertEqual("https://hubtest", statefulset_json['spec']['template']['spec']['containers'][0]['env'][4].get('value'))
@@ -175,11 +169,7 @@ class CustomResourceTestCase(KubernetesTestCase):
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/internal-mirror', body=INVALID_SECRET)
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/registry-mirror-hub', body=VALID_REG_SECRET)
         responses.add('PUT', '/api/v1/namespaces/kube-extra/secrets/registry-mirror-hub', body=VALID_REG_SECRET)
-        mirror = RegistryMirror("kube-extra", "CREATED",
-                                **{"metadata": {"name": "hub"},
-                                   "spec": {"upstreamUrl": "hubtest",
-                                            "credentialsSecret": "internal-mirror"}})
-        mirror.update_stateful_set(None)
+        self.mirror_with_credential_secret.update_stateful_set(None)
         statefulset_request, stateful_resp = responses.calls[2]
         statefulset_json = json.loads(statefulset_request.body)
         self.assertEqual("https://hubtest", statefulset_json['spec']['template']['spec']['containers'][0]['env'][4].get('value'))
@@ -190,11 +180,7 @@ class CustomResourceTestCase(KubernetesTestCase):
         responses.add('POST', '/apis/apps/v1beta1/namespaces/kube-extra/statefulsets', body=EMPTY_STATEFUL_SET)
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/internal-mirror', body=INVALID_SECRET)
         responses.add('GET', '/api/v1/namespaces/kube-extra/secrets/registry-mirror-hub', body=INVALID_SECRET)
-        mirror = RegistryMirror("kube-extra", "CREATED",
-                                **{"metadata": {"name": "hub"},
-                                   "spec": {"upstreamUrl": "hubtest",
-                                            "credentialsSecret": "internal-mirror"}})
-        mirror.update_stateful_set(None)
+        self.mirror_with_credential_secret.update_stateful_set(None)
         statefulset_request, stateful_resp = responses.calls[2]
         statefulset_json = json.loads(statefulset_request.body)
         self.assertEqual('https://hubtest', statefulset_json['spec']['template']['spec']['containers'][0]['env'][4].get('value'))

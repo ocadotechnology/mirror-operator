@@ -11,11 +11,14 @@ TEST_DATA = [{"type": "CREATED", "object": {"metadata": {"name": "hub"},
              {"type": "MODIFIED", "object": {"metadata": {"name": "hub"},
                                       "spec": {"upstreamUrl": "hubtest"}}}]
 
+
+
 def stream_mock():
     for elem in TEST_DATA:
         yield elem
 
 responses = Responses('urllib3')
+
 
 class OperatorTestCase(KubernetesTestCase):
     def setUp(self):
@@ -25,7 +28,7 @@ class OperatorTestCase(KubernetesTestCase):
             "mirror_hostess_image": "some-public-mirror-hostess-image",
             "image_pull_secrets": None,
             "secret_name": None,
-            "ocado_cert_name": None,
+            "cert_name": None,
         }
         self.operator = MirrorOperator(env_var_dict)
 

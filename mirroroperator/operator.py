@@ -22,7 +22,7 @@ class MirrorOperator(object):
             mirror_hostess_image(used in RegistryMirror),
             image_pull_secrets(used in RegistryMirror, optional),
             secret_name(optional),
-            ocado_cert_name(optional)
+            cert_name(optional)
         """
         self.registry_mirror_vars = env_vars
         kubernetes.config.load_incluster_config()
@@ -59,7 +59,7 @@ if __name__ == '__main__':
         # ocado specific secret
         secret_name=os.environ.get("SECRET_NAME"),
         # needed in ocado clusters
-        ocado_cert_name=os.environ.get("OCADO_CERT_NAME"),
+        cert_name=os.environ.get("CERT_NAME"),
     )
     operator = MirrorOperator(env_vars)
 

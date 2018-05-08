@@ -25,7 +25,7 @@ class RegistryMirror(object):
         self.credentials_secret_name = kwargs.get("spec", {}).get("credentialsSecret")
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.secret_name = kwargs["secret_name"]
-        self.ocado_cert_name = kwargs["ocado_cert_name"]
+        self.cert_name = kwargs["cert_name"]
 
         self.labels = {
             "app": "docker-registry",
@@ -333,12 +333,12 @@ class RegistryMirror(object):
         pod_labels = {'component': 'registry'}
         pod_labels.update(self.labels)
         volumes = []
-        if self.ocado_cert_name:
+        if self.cert_name:
             volumes = [
                 client.V1Volume(
-                    name=self.ocado_cert_name,
+                    name=self.cert_name,
                     config_map=client.V1ConfigMapVolumeSource(
-                        name=self.ocado_cert_name
+                        name=self.cert_name
                     )
                 )
             ]

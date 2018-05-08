@@ -8,7 +8,6 @@ from copy import deepcopy
 responses = Responses('urllib3')
 
 
-
 class CustomResourceTestCase(KubernetesTestCase):
     def setUp(self):
         super().setUp()
@@ -17,7 +16,7 @@ class CustomResourceTestCase(KubernetesTestCase):
             "mirror_hostess_image": "some-public-mirror-hostess-image",
             "image_pull_secrets": None,
             "secret_name": None,
-            "ocado_cert_name": None,
+            "cert_name": None,
         }
         registry_kwargs = {"metadata": {"name": "hub"},
                            "spec": {"upstreamUrl": "hubtest"}}

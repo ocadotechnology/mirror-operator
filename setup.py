@@ -13,13 +13,17 @@ test_dependencies = [
     'nose',
 ]
 dependencies = [
-    'kubernetes'
+    'kubernetes==3.0.0a1',
+    'statsd==3.2.1',
     ]
+
+
 class NoseTestCommand(TestCommand):
     def finalize_options(self):
         TestCommand.finalize_options(self)
         self.test_args = []
         self.test_suite = True
+
     def run_tests(self):
         # Run nose ensuring that argv simulates running nosetests directly
         import nose

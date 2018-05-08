@@ -14,7 +14,7 @@ class RegistryMirror(object):
     def __init__(self, event_type, namespace, mirror_hostess_image, **kwargs):
         self.event_type = event_type
         self.namespace = namespace
-        self.mirror_hostess_image= mirror_hostess_image
+        self.mirror_hostess_image = mirror_hostess_image
         self.kind = kwargs.get("kind")
         self.name = kwargs.get("metadata", {}).get("name")
         self.uid = kwargs.get("metadata", {}).get("uid")

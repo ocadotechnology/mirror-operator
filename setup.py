@@ -37,9 +37,6 @@ setup(
     include_package_data=True,
     description='A python program for managing docker registry mirrors within a kubernetes cluster',
     long_description=README,
-    url='https://gitlab.tech.lastmile.com/kubernetes/mirror-operator',
-    author='Charlotte Godley',
-    author_email='c.godley@ocado.com',
     classifiers=[
         'Environment :: Web Environment',
         'Intended Audience :: Developers',

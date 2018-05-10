@@ -7,13 +7,13 @@ EMPTY_SERVICE = """{"api_version": "v1",
                   "creation_timestamp": "2017-09-12T13:23:47Z",
                   "labels": {"app": "docker-registry", "mirror": "hub"},
                   "name": "registry-mirror-hub",
-                  "namespace": "kube-extra",
+                  "namespace": "default",
                   "ownerReferences": [{"api_version": "k8s.osp.tech/v1",
                                         "kind": "RegistryMirror",
                                         "name": "hub",
                                         "uid": "c7137776-97b7-11e7-a6e5-0800276be3ff"}],
                   "resource_version": "13288",
-                  "self_link": "/api/v1/namespaces/kube-extra/services/registry-mirror-hub",
+                  "self_link": "/api/v1/namespaces/default/services/registry-mirror-hub",
                   "uid": "79fb4790-97bd-11e7-a6e5-0800276be3ff"},
      "spec": {"cluster_ip": "10.0.0.81",
               "ports": [{"name": "https",
@@ -30,8 +30,8 @@ EMPTY_DAEMON_SET = """{
     "apiVersion":"extensions/v1beta1",
     "metadata": {
                 "name":"registry-mirror-hub-utils",
-                "namespace":"kube-extra",
-                "selfLink":"/apis/extensions/v1beta1/namespaces/kube-extra/daemonsets/registry-mirror-hub-utils",
+                "namespace":"default",
+                "selfLink":"/apis/extensions/v1beta1/namespaces/default/daemonsets/registry-mirror-hub-utils",
                 "uid":"dff71ac8-97c2-11e7-a6e5-0800276be3ff",
                 "resourceVersion":"18519",
                 "generation":1,
@@ -102,8 +102,8 @@ EMPTY_STATEFUL_SET = """{
     "apiVersion":"apps/v1beta1",
     "metadata": {
         "name":"registry-mirror-hub",
-        "namespace":"kube-extra",
-        "selfLink":"/apis/apps/v1beta1/namespaces/kube-extra/statefulsets/registry-mirror-hub",
+        "namespace":"default",
+        "selfLink":"/apis/apps/v1beta1/namespaces/default/statefulsets/registry-mirror-hub",
         "uid":"512e7799-97c4-11e7-a6e5-0800276be3ff",
         "resourceVersion":"20254",
         "generation":1,
@@ -195,9 +195,9 @@ valid_secret = {
     "metadata": {
         "creationTimestamp": "2017-09-13T10:20:26Z",
         "name": "internal-mirror",
-        "namespace": "kube-extra",
+        "namespace": "default",
         "resourceVersion": "7889",
-        "selfLink": "/api/v1/namespaces/kube-extra/secrets/internal-mirror",
+        "selfLink": "/api/v1/namespaces/default/secrets/internal-mirror",
         "uid": "294e16e7-986d-11e7-9c1f-0800275e72fe"
     },
     "type": "Opaque"
@@ -213,9 +213,9 @@ valid_reg_secret = {
     "metadata": {
         "creationTimestamp": "2017-09-13T10:20:26Z",
         "name": "registry-mirror-hub",
-        "namespace": "kube-extra",
+        "namespace": "default",
         "resourceVersion": "7889",
-        "selfLink": "/api/v1/namespaces/kube-extra/secrets/internal-mirror",
+        "selfLink": "/api/v1/namespaces/default/secrets/internal-mirror",
         "uid": "294e16e7-986d-11e7-9c1f-0800275e72fe"
     },
     "type": "Opaque"
@@ -233,9 +233,9 @@ INVALID_SECRET = """
         "metadata": {
             "creationTimestamp": "2017-09-13T10:20:26Z",
             "name": "internal-mirror",
-            "namespace": "kube-extra",
+            "namespace": "default",
             "resourceVersion": "7889",
-            "selfLink": "/api/v1/namespaces/kube-extra/secrets/internal-mirror",
+            "selfLink": "/api/v1/namespaces/default/secrets/internal-mirror",
             "uid": "294e16e7-986d-11e7-9c1f-0800275e72fe"
         },
         "type": "Opaque"

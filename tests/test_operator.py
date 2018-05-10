@@ -24,7 +24,7 @@ class OperatorTestCase(KubernetesTestCase):
     def setUp(self):
         super().setUp()
         env_var_dict = {
-            "namespace": "kube-extra",
+            "namespace": "default",
             "mirror_hostess_image": "some-public-mirror-hostess-image",
             "image_pull_secrets": None,
             "secret_name": None,
@@ -36,16 +36,16 @@ class OperatorTestCase(KubernetesTestCase):
     def test_will_read_crds_blanks_already_exist(self):
         '''Should listen to CRDs being streamed + call apis appropriately. In this case the objects already exist'''
         stream_generator = stream_mock()
-        responses.add('GET', '/api/v1/namespaces/kube-extra/services/registry-mirror-hub', EMPTY_SERVICE)
-        responses.add('GET', '/api/v1/namespaces/kube-extra/services/registry-mirror-hub-headless', EMPTY_SERVICE)
-        responses.add('GET', '/apis/extensions/v1beta1/namespaces/kube-extra/daemonsets/registry-mirror-hub-utils',
+        responses.add('GET', '/api/v1/namespaces/default/services/registry-mirror-hub', EMPTY_SERVICE)
+        responses.add('GET', '/api/v1/namespaces/default/services/registry-mirror-hub-headless', EMPTY_SERVICE)
+        responses.add('GET', '/apis/extensions/v1beta1/namespaces/default/daemonsets/registry-mirror-hub-utils',
                       EMPTY_DAEMON_SET)
-        responses.add('GET', '/apis/apps/v1beta1/namespaces/kube-extra/statefulsets/registry-mirror-hub',
+        responses.add('GET', '/apis/apps/v1beta1/namespaces/default/statefulsets/registry-mirror-hub',
                       EMPTY_STATEFUL_SET)
-        responses.add('PUT', '/api/v1/namespaces/kube-extra/services/registry-mirror-hub', '')
-        responses.add('PUT', '/api/v1/namespaces/kube-extra/services/registry-mirror-hub', '')
-        responses.add('PUT', '/apis/extensions/v1beta1/namespaces/kube-extra/daemonsets/registry-mirror-hub-utils', '')
-        responses.add('PUT', '/apis/apps/v1beta1/namespaces/kube-extra/statefulsets/registry-mirror-hub', '')
+        responses.add('PUT', '/api/v1/namespaces/default/services/registry-mirror-hub', '')
+        responses.add('PUT', '/api/v1/namespaces/default/services/registry-mirror-hub', '')
+        responses.add('PUT', '/apis/extensions/v1beta1/namespaces/default/daemonsets/registry-mirror-hub-utils', '')
+        responses.add('PUT', '/apis/apps/v1beta1/namespaces/default/statefulsets/registry-mirror-hub', '')
         with patch('kubernetes.watch.watch.Watch.stream', return_value=stream_generator):
             self.operator.watch_registry_mirrors()
             # all the objects exist, so only 4 gets followed by 4 updates
@@ -72,17 +72,17 @@ class OperatorTestCase(KubernetesTestCase):
     def test_will_read_crds_blanks_dont_exist(self):
         '''Should listen to CRDs being streamed + call apis appropriately. In this case the objects don't alreadu exist'''
         stream_generator = stream_mock()
-        responses.add('GET', '/api/v1/namespaces/kube-extra/services/registry-mirror-hub', status=404, body='{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"services \\"registry-mirror-internal\\" not found","reason":"NotFound","details":{"name":"registry-mirror-internal","kind":"services"},"code":404}')
-        responses.add('GET', '/api/v1/namespaces/kube-extra/services/registry-mirror-hub-headless', status=404)
-        responses.add('GET', '/apis/apps/v1beta1/namespaces/kube-extra/statefulsets/registry-mirror-hub',
+        responses.add('GET', '/api/v1/namespaces/default/services/registry-mirror-hub', status=404, body='{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"services \\"registry-mirror-internal\\" not found","reason":"NotFound","details":{"name":"registry-mirror-internal","kind":"services"},"code":404}')
+        responses.add('GET', '/api/v1/namespaces/default/services/registry-mirror-hub-headless', status=404)
+        responses.add('GET', '/apis/apps/v1beta1/namespaces/default/statefulsets/registry-mirror-hub',
                       status=404)
-        responses.add('GET', '/apis/extensions/v1beta1/namespaces/kube-extra/daemonsets/registry-mirror-hub-utils',
+        responses.add('GET', '/apis/extensions/v1beta1/namespaces/default/daemonsets/registry-mirror-hub-utils',
                       status=404)
-        responses.add('POST', '/api/v1/namespaces/kube-extra/services', EMPTY_SERVICE)
-        responses.add('POST', '/api/v1/namespaces/kube-extra/services', EMPTY_SERVICE)
-        responses.add('POST', '/apis/apps/v1beta1/namespaces/kube-extra/statefulsets',
+        responses.add('POST', '/api/v1/namespaces/default/services', EMPTY_SERVICE)
+        responses.add('POST', '/api/v1/namespaces/default/services', EMPTY_SERVICE)
+        responses.add('POST', '/apis/apps/v1beta1/namespaces/default/statefulsets',
                       EMPTY_STATEFUL_SET)
-        responses.add('POST', '/apis/extensions/v1beta1/namespaces/kube-extra/daemonsets',
+        responses.add('POST', '/apis/extensions/v1beta1/namespaces/default/daemonsets',
                       EMPTY_DAEMON_SET)
         with patch('kubernetes.watch.watch.Watch.stream', return_value=stream_generator):
             self.operator.watch_registry_mirrors()

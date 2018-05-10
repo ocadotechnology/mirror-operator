@@ -10,7 +10,7 @@ from mirroroperator.registrymirror import RegistryMirror
 
 LOGGER = logging.getLogger(__name__)
 
-CRD_GROUP = "k8s.osp.tech"
+CRD_GROUP = "k8s.ocado.tech"
 CRD_VERSION = "v1"
 CRD_PLURAL = "registrymirrors"
 

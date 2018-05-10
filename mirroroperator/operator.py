@@ -56,9 +56,9 @@ if __name__ == '__main__':
         mirror_hostess_image=os.environ.get("MIRROR_HOSTESS_IMAGE"),
         # optional in V1PodSpec secrets split with comma
         image_pull_secrets=os.environ.get("IMAGE_PULL_SECRETS"),
-        # ocado specific secret
+        # get secret name:
         secret_name=os.environ.get("SECRET_NAME"),
-        # needed in ocado clusters
+        # cert_name - needed in clusters
         cert_name=os.environ.get("CERT_NAME"),
     )
     operator = MirrorOperator(env_vars)

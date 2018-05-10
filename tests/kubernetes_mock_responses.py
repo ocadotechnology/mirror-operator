@@ -8,7 +8,7 @@ EMPTY_SERVICE = """{"api_version": "v1",
                   "labels": {"app": "docker-registry", "mirror": "hub"},
                   "name": "registry-mirror-hub",
                   "namespace": "default",
-                  "ownerReferences": [{"api_version": "k8s.osp.tech/v1",
+                  "ownerReferences": [{"api_version": "k8s.ocado.tech/v1",
                                         "kind": "RegistryMirror",
                                         "name": "hub",
                                         "uid": "c7137776-97b7-11e7-a6e5-0800276be3ff"}],
@@ -42,7 +42,7 @@ EMPTY_DAEMON_SET = """{
                     },
                 "ownerReferences": [
                     {
-                    "apiVersion":"k8s.osp.tech/v1",
+                    "apiVersion":"k8s.ocado.tech/v1",
                     "kind":"RegistryMirror",
                     "name":"hub",
                     "uid":"db3c1f82-97c2-11e7-a6e5-0800276be3ff"
@@ -114,7 +114,7 @@ EMPTY_STATEFUL_SET = """{
             },
         "ownerReferences": [
             {
-            "apiVersion":"k8s.osp.tech/v1",
+            "apiVersion":"k8s.ocado.tech/v1",
             "kind":"RegistryMirror",
             "name":"hub",
             "uid":"db3c1f82-97c2-11e7-a6e5-0800276be3ff"

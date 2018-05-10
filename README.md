@@ -17,10 +17,10 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   # name must match the spec fields below, and be in the form: <plural>.<group>
-  name: registrymirrors.k8s.osp.tech
+  name: registrymirrors.k8s.ocado.tech
 spec:
   # group name to use for REST API: /apis/<group>/<version>
-  group: k8s.osp.tech
+  group: k8s.ocado.tech
   # version name to use for REST API: /apis/<group>/<version>
   version: v1
   # either Namespaced or Cluster
@@ -40,7 +40,7 @@ spec:
 
 You can then create new mirrors by providing at minimum an `upstreamUrl` in the spec:
 ```yaml
-apiVersion: k8s.osp.tech/v1
+apiVersion: k8s.ocado.tech/v1
 kind: RegistryMirror
 metadata:
   name: docker
@@ -51,7 +51,7 @@ spec:
 If you have a username/password which must be used to access the upstream mirror, you can add a `credentialsSecret` key to the spec, who's value should
 be the name of the secret, e.g:
 ```yaml
-apiVersion: k8s.osp.tech/v1
+apiVersion: k8s.ocado.tech/v1
 kind: RegistryMirror
 metadata:
   name: internal

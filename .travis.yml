@@ -11,8 +11,9 @@ env:
   - VCS_SOURCE="https://github.com/${TRAVIS_REPO_SLUG}"
 script:
 - python setup.py test
-after_script:
 - ./.travis/docker-build.sh
+after_script:
+- docker images
 deploy:
   provider: script
   script: ./.travis/docker-push.sh

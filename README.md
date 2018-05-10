@@ -11,7 +11,32 @@ NAMESPACE | The namespace in which the resources should be created. This should 
 SECONDS_BETWEEN_STREAMS | Time to sleep between calls to the API. The operator will occasionally lose connection or else fail to run if the Custom Resource Definition does not exist. | 30
 
 ## Usage
-In order to have the operator deploy a new mirror, the cluster needs to have the custom resource defined. The current version of this can be found in [kube-extra].
+In order to have the operator deploy a new mirror, the cluster needs to have the custom resource defined:
+```
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  # name must match the spec fields below, and be in the form: <plural>.<group>
+  name: registrymirrors.k8s.osp.tech
+spec:
+  # group name to use for REST API: /apis/<group>/<version>
+  group: k8s.osp.tech
+  # version name to use for REST API: /apis/<group>/<version>
+  version: v1
+  # either Namespaced or Cluster
+  scope: Cluster
+  names:
+    # plural name to be used in the URL: /apis/<group>/<version>/<plural>
+    plural: registrymirrors
+    # singular name to be used as an alias on the CLI and for display
+    singular: registrymirror
+    # kind is normally the CamelCased singular type. Your resource manifests use this.
+    kind: RegistryMirror
+    # shortNames allow shorter string to match your resource on the CLI
+    shortNames:
+    - rm
+
+```
 
 You can then create new mirrors by providing at minimum an `upstreamUrl` in the spec:
 ```yaml

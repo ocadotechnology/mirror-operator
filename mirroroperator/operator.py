@@ -51,7 +51,7 @@ if __name__ == '__main__':
 
     # Get organization specific variables from env
     env_vars = dict(
-        namespace=os.environ.get("NAMESPACE", "kube-extra"),
+        namespace=os.environ.get("NAMESPACE", "default"),
         # needed
         mirror_hostess_image=os.environ.get("MIRROR_HOSTESS_IMAGE"),
         # optional in V1PodSpec secrets split with comma

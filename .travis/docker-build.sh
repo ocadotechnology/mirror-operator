@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
+VERSION="$TRAVIS_COMMIT"
 if [ -n "${TRAVIS_TAG}" ]; then
-  VERSION=$TRAVIS_COMMIT
+  VERSION="${TRAVIS_TAG}"
 fi
 
 docker build --pull --cache-from "$TRAVIS_REPO_SLUG" --tag "$TRAVIS_REPO_SLUG" \

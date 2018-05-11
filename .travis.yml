@@ -7,7 +7,6 @@ services:
 env:
   global:
   - REGISTRY_USER=ocadotechnologygitlab
-  - VERSION=$TRAVIS_TAG
   - VCS_SOURCE="https://github.com/${TRAVIS_REPO_SLUG}"
 script:
 - python setup.py test

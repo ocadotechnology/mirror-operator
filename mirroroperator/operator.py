@@ -6,6 +6,7 @@ import os
 from http import HTTPStatus
 from kubernetes.client.rest import ApiException
 from mirroroperator.registrymirror import RegistryMirror
+from mirroroperator.exceptions import NoCRDException
 
 
 LOGGER = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ class MirrorOperator(object):
         except ApiException as e:
             status = HTTPStatus(e.status)
             if status == HTTPStatus.NOT_FOUND:
-                LOGGER.error("CRD not found. Please ensure you create a CRD with group - %s,"
+                raise NoCRDException("CRD not found. Please ensure you create a CRD with group - %s,"
                              "version - %s and plural - %s before this operator can run.",
                              CRD_GROUP, CRD_VERSION, CRD_PLURAL)
             else:
@@ -66,5 +67,5 @@ if __name__ == '__main__':
     sleep_time = os.environ.get("SECONDS_BETWEEN_STREAMS", 30)
     while True:
         operator.watch_registry_mirrors()
-        LOGGER.info("API closed connection or CRD does not exist, sleeping for %i seconds", sleep_time)
+        LOGGER.info("API closed connection, sleeping for %i seconds", sleep_time)
         time.sleep(sleep_time)

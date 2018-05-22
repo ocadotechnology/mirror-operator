@@ -1,4 +1,5 @@
 from mirroroperator.operator import MirrorOperator
+from mirroroperator.exceptions import NoCRDException
 from tests.kubernetes_test_case import KubernetesTestCase
 from tests.kubernetes_mock_responses import *
 import kubernetes
@@ -112,7 +113,8 @@ class OperatorTestCase(KubernetesTestCase):
     def test_exception_handling(self):
         '''Should report the CRD doesn't exist'''
         kubernetes.watch.Watch.stream = Mock(side_effect=ApiException(status=404))
-        self.operator.watch_registry_mirrors()
+        with self.assertRaises(NoCRDException):
+            self.operator.watch_registry_mirrors()
 
     def test_exception_handling_other(self):
         '''Should report there was some other error'''

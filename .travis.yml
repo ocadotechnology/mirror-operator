@@ -8,6 +8,7 @@ env:
   global:
   - REGISTRY_USER=ocadotechnologygitlab
   - VCS_SOURCE="https://github.com/${TRAVIS_REPO_SLUG}"
+  - secure: "z0oUHGGWxqtNuOyGz5DGi83gmAUDcS9ksVJrYVBLGUvgxeUCoYtNyySlLE/81bbKyTdLdeqtv0kEKhCIP1G9a1P+f2D9UCuu/pTSgEgjUlbBJqA+3seckQWt/SnfWr3hU/ySqt0UtB47rRyttZBzQmYgf2ECmDhVASRi3B02ogNHW4wwFBUwwYllotKXijz6NyYO85tzE2SeNrO8G2z0UjpLZAQawL3Whx5ApQeMm6iotDkSoQdUY0BtVap3rjG6wiY5WCBraPMWjlEZKCrbs08T7qqSkiB/RklXAppSSwB5OaLsH68xVE1/ZaNvvKa1YutoubJytyKYHYtVLBOyDOyYYPVn/Kgch0jnLL5hLkoyz8PDrHw2Pop9j+yNUUbEEihQbVpsU518IGX0X/z/jiy/nIcFIBo7diXzg+3w425Nk8iRKdmfaOC/t9/+qhpo+ULVloZcVr2Wv6kM34RDoowjit4SVRCn7XFo5PibQO+5neV0jdS5F/NPCF1LdWBV5uxjlLxcMxwEVTi4uvufRBswpOI2P9B9HY2lF02eLtCC7w90A954uIX/Gjojqy0QMbzKfPCl3IV0Geq5lcYhu8Hz9GqOJC/b81KcnvWGNzKYJjUIAWIWxjremkTMS12dgE8DGTx8p7z7nepWRqV63zVIYcRMP22517wZkTNaxEE="
 script:
 - python setup.py test
 - ./.travis/docker-build.sh
@@ -18,3 +19,4 @@ deploy:
   script: ./.travis/docker-push.sh
   on:
     branch: master
+    tags: true

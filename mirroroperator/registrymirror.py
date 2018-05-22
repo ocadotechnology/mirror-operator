@@ -359,7 +359,7 @@ class RegistryMirror(object):
                         init_containers=[
                             client.V1Container(
                                 name="validate-state-file",
-                                image="python:3.6-alpine3.7",
+                                image="python:3.6-alpine",
                                 env=[
                                     client.V1EnvVar(
                                         name="STATE_FILE",

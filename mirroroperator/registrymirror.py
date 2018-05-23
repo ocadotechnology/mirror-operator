@@ -11,10 +11,13 @@ LOGGER = logging.getLogger(__name__)
 
 
 class RegistryMirror(object):
-    def __init__(self, event_type, namespace, mirror_hostess_image, **kwargs):
+    def __init__(self, event_type, namespace, hostess_docker_registry,
+                 hostess_docker_image, hostess_docker_tag, **kwargs):
         self.event_type = event_type
         self.namespace = namespace
-        self.mirror_hostess_image = mirror_hostess_image
+        self.hostess_docker_registry = hostess_docker_registry
+        self.hostess_docker_image = hostess_docker_image
+        self.hostess_docker_tag = hostess_docker_tag
         self.kind = kwargs.get("kind")
         self.name = kwargs.get("metadata", {}).get("name")
         self.uid = kwargs.get("metadata", {}).get("uid")
@@ -134,7 +137,7 @@ class RegistryMirror(object):
                                     client.V1EnvVar(name="HOSTS_FILE_BACKUP",
                                                     value="/etc/hosts.backup/hosts")
                                 ],
-                                image=self.mirror_hostess_image,
+                                image="{}/{}:{}".format(self.hostess_docker_registry, self.hostess_docker_image, self.hostess_docker_tag),
                                 image_pull_policy="Always",
                                 resources=client.V1ResourceRequirements(
                                     requests={"memory": "32Mi", "cpu": "0.001"},

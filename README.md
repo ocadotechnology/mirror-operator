@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/ocadotechnology/mirror-operator.svg?branch=master)](https://travis-ci.org/ocadotechnology/mirror-operator)
+
 # mirror-operator
 A python module + resulting docker image which listens for registry mirror requests and creates resources for that mirror. 
 If you're confused what an operator is, [this blog post][operators] will give you a short introduction, but please note it's a little old.

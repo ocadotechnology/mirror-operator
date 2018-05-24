@@ -20,7 +20,9 @@ class MirrorOperator(object):
     def __init__(self, env_vars):
         """
         :param env_vars: dictionary includes namespace,
-            mirror_hostess_image(used in RegistryMirror),
+            hostess_docker_registry (used in RegistryMirror),
+            hostess_docker_image (used in RegistryMirror),
+            hostess_docker_tag (used in RegistryMirror),
             image_pull_secrets(used in RegistryMirror, optional),
             secret_name(optional),
             cert_name(optional)
@@ -53,8 +55,11 @@ if __name__ == '__main__':
     # Get organization specific variables from env
     env_vars = dict(
         namespace=os.environ.get("NAMESPACE", "default"),
-        # needed
-        mirror_hostess_image=os.environ.get("MIRROR_HOSTESS_IMAGE"),
+        # optional to allow for image to be pulled from elsewhere
+        hostess_docker_registry=os.environ.get("HOSTESS_DOCKER_REGISTRY", "docker.io"),
+        hostess_docker_image=os.environ.get("HOSTESS_DOCKER_IMAGE",
+                                            "ocadotechnology/mirror-hostess"),
+        hostess_docker_tag=os.environ.get("HOSTESS_DOCKER_TAG", "1.1.0"),
         # optional in V1PodSpec secrets split with comma
         image_pull_secrets=os.environ.get("IMAGE_PULL_SECRETS"),
         # get secret name:

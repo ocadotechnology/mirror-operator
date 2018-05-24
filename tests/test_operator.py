@@ -26,7 +26,9 @@ class OperatorTestCase(KubernetesTestCase):
         super().setUp()
         env_var_dict = {
             "namespace": "default",
-            "mirror_hostess_image": "some-public-mirror-hostess-image",
+            "hostess_docker_registry": "docker.io",
+            "hostess_docker_image": "ocadotechnology/mirror-hostess",
+            "hostess_docker_tag": None,
             "image_pull_secrets": None,
             "secret_name": None,
             "cert_name": None,

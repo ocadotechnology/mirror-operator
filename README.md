@@ -11,6 +11,9 @@ Name | description | default
 --- | --- | --- 
 NAMESPACE | The namespace in which the resources should be created. This should be the same namespace as where the container is running | default 
 SECONDS_BETWEEN_STREAMS | Time to sleep between calls to the API. The operator will occasionally lose connection or else fail to run if the Custom Resource Definition does not exist. | 30
+HOSTESS_DOCKER_REGISTRY | The docker registry where mirror-hostess is to be pulled from. | docker.io 
+HOSTESS_DOCKER_IMAGE | The name of the docker image for mirror-hostess. | ocadotechnology/mirror-hostess
+HOSTESS_DOCKER_TAG | The tag for the mirror-hostess docker image. | 1.1.0
 
 ## Usage
 In order to have the operator deploy a new mirror, the cluster needs to have the custom resource defined:

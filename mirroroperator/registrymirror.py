@@ -27,8 +27,8 @@ class RegistryMirror(object):
         self.upstreamUrl = kwargs.get("spec", {}).get("upstreamUrl")
         self.credentials_secret_name = kwargs.get("spec", {}).get("credentialsSecret")
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
-        self.secret_name = kwargs["secret_name"]
-        self.cert_name = kwargs["cert_name"]
+        self.docker_certificate_secret = kwargs["docker_certificate_secret"]
+        self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
 
         self.labels = {
             "app": "docker-registry",
@@ -214,7 +214,7 @@ class RegistryMirror(object):
                             client.V1Volume(
                                 name="tls",
                                 secret=client.V1SecretVolumeSource(
-                                    secret_name=self.secret_name
+                                    docker_certificate_secret=self.docker_certificate_secret
                                 )
                             )
                         ]
@@ -336,24 +336,27 @@ class RegistryMirror(object):
         pod_labels = {'component': 'registry'}
         pod_labels.update(self.labels)
         volumes = []
-        if self.cert_name:
+        if self.ca_certificate_bundle:
             volumes = [
                 client.V1Volume(
-                    name=self.cert_name,
+                    name=self.ca_certificate_bundle,
                     config_map=client.V1ConfigMapVolumeSource(
-                        name=self.cert_name
+                        name=self.ca_certificate_bundle
                     )
                 )
             ]
-        if self.secret_name:
+        if self.docker_certificate_secret:
             volumes.append(
                 client.V1Volume(
                     name="tls",
                     secret=client.V1SecretVolumeSource(
-                        secret_name=self.secret_name
+                        docker_certificate_secret=self.docker_certificate_secret
                     ),
                 )
             )
+        else:
+            raise NameError('No docker certificate secret specified')
+
         stateful_set.spec.template = client.V1PodTemplateSpec(
                     metadata=client.V1ObjectMeta(
                         labels=pod_labels
@@ -417,7 +420,7 @@ class RegistryMirror(object):
                                         mount_path="/var/lib/registry"
                                     ),
                                     client.V1VolumeMount(
-                                        name=self.cert_name,
+                                        name=self.ca_certificate_bundle,
                                         mount_path="/etc/ssl/certs",
                                         read_only=True
                                     ),
@@ -430,7 +433,7 @@ class RegistryMirror(object):
                             )
                         ],
                         termination_grace_period_seconds=10,
-                        volumes=volumes or None,
+                        volumes=volumes,
                     )
                 )
         stateful_set.spec.update_strategy = client.V1beta1StatefulSetUpdateStrategy(

@@ -17,8 +17,8 @@ class CustomResourceTestCase(KubernetesTestCase):
             "hostess_docker_image": "ocadotechnology/mirror-hostess",
             "hostess_docker_tag": 2,
             "image_pull_secrets": None,
-            "secret_name": None,
-            "cert_name": None,
+            "docker_certificate_secret": None,
+            "ca_certificate_bundle": None,
         }
         registry_kwargs = {"metadata": {"name": "hub"},
                            "spec": {"upstreamUrl": "hubtest"}}

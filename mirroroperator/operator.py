@@ -24,8 +24,8 @@ class MirrorOperator(object):
             hostess_docker_image (used in RegistryMirror),
             hostess_docker_tag (used in RegistryMirror),
             image_pull_secrets(used in RegistryMirror, optional),
-            secret_name(optional),
-            cert_name(optional)
+            docker_certificate_secret(used in RegistryMirror),
+            ca_certificate_bundle(optional)
         """
         self.registry_mirror_vars = env_vars
         kubernetes.config.load_incluster_config()
@@ -62,10 +62,10 @@ if __name__ == '__main__':
         hostess_docker_tag=os.environ.get("HOSTESS_DOCKER_TAG", "1.1.0"),
         # optional in V1PodSpec secrets split with comma
         image_pull_secrets=os.environ.get("IMAGE_PULL_SECRETS"),
-        # get secret name:
-        secret_name=os.environ.get("SECRET_NAME"),
-        # cert_name - needed in clusters
-        cert_name=os.environ.get("CERT_NAME"),
+        # get the docker certificate:
+        docker_certificate_secret=os.environ.get("DOCKER_CERTIFICATE_SECRET"),
+        # get ca certificate
+        ca_certificate_bundle=os.environ.get("CA_CERTIFICATE_BUNDLE"),
     )
     operator = MirrorOperator(env_vars)
 

@@ -12,12 +12,14 @@ LOGGER = logging.getLogger(__name__)
 
 class RegistryMirror(object):
     def __init__(self, event_type, namespace, hostess_docker_registry,
-                 hostess_docker_image, hostess_docker_tag, **kwargs):
+                 hostess_docker_image, hostess_docker_tag,
+                 docker_certificate_secret, **kwargs):
         self.event_type = event_type
         self.namespace = namespace
         self.hostess_docker_registry = hostess_docker_registry
         self.hostess_docker_image = hostess_docker_image
         self.hostess_docker_tag = hostess_docker_tag
+        self.docker_certificate_secret = docker_certificate_secret
         self.kind = kwargs.get("kind")
         self.name = kwargs.get("metadata", {}).get("name")
         self.uid = kwargs.get("metadata", {}).get("uid")
@@ -25,9 +27,9 @@ class RegistryMirror(object):
         self.daemon_set_name = self.full_name + "-utils"
         self.apiVersion = kwargs.get("apiVersion")
         self.upstreamUrl = kwargs.get("spec", {}).get("upstreamUrl")
-        self.credentials_secret_name = kwargs.get("spec", {}).get("credentialsSecret")
+        self.credentials_secret_name = kwargs.get(
+            "spec", {}).get("credentialsSecret")
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
-        self.docker_certificate_secret = kwargs["docker_certificate_secret"]
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
 
         self.labels = {
@@ -83,8 +85,8 @@ class RegistryMirror(object):
             self.update_daemon_set(daemon_set)
 
     def run_action_and_parse_error(self, func, *args, **kwargs):
-        """
-        Helper method to avoid try/excepts all over the place + does the exception handling and parsing
+        """ Helper method to avoid try/excepts all over the place + does
+        the exception handling and parsing.
         (Kubernetes python client tends to just dump the details in .body)
         Args:
             func: A function which can raise ApiException.
@@ -101,7 +103,9 @@ class RegistryMirror(object):
             try:
                 json_error = json.loads(api_exception.body)
                 code = HTTPStatus(int(json_error['code']))
-                LOGGER.exception("API returned status: %s, msg: %s, method: %s", code, json_error['message'], func)
+                LOGGER.exception(
+                    "API returned status: %s, msg: %s, method: %s",
+                    code, json_error['message'], func)
 
             except json.decoder.JSONDecodeError as e:
                 LOGGER.error("Decoder exception loading error msg: %s;"
@@ -124,23 +128,35 @@ class RegistryMirror(object):
                             client.V1Container(
                                 name="mirror-hostess",
                                 env=[
-                                    client.V1EnvVar(name="LOCK_FILE",
-                                                    value="/var/lock/hostess/mirror-hostess"),
-                                    client.V1EnvVar(name="SERVICE_NAME",
-                                                    value=self.full_name),
-                                    client.V1EnvVar(name="SERVICE_NAMESPACE",
-                                                    value=self.namespace),
-                                    client.V1EnvVar(name="SHADOW_FQDN",
-                                                    value="mirror-"+self.upstreamUrl),
-                                    client.V1EnvVar(name="HOSTS_FILE",
-                                                    value="/etc/hosts_from_host"),
-                                    client.V1EnvVar(name="HOSTS_FILE_BACKUP",
-                                                    value="/etc/hosts.backup/hosts")
+                                    client.V1EnvVar(
+                                        name="LOCK_FILE",
+                                        value="/var/lock/hostess/\
+                                        mirror-hostess"),
+                                    client.V1EnvVar(
+                                        name="SERVICE_NAME",
+                                        value=self.full_name),
+                                    client.V1EnvVar(
+                                        name="SERVICE_NAMESPACE",
+                                        value=self.namespace),
+                                    client.V1EnvVar(
+                                        name="SHADOW_FQDN",
+                                        value="mirror-"+self.upstreamUrl),
+                                    client.V1EnvVar(
+                                        name="HOSTS_FILE",
+                                        value="/etc/hosts_from_host"),
+                                    client.V1EnvVar(
+                                        name="HOSTS_FILE_BACKUP",
+                                        value="/etc/hosts.backup/hosts")
                                 ],
-                                image="{}/{}:{}".format(self.hostess_docker_registry, self.hostess_docker_image, self.hostess_docker_tag),
+                                image="{}/{}:{}".format(
+                                    self.hostess_docker_registry,
+                                    self.hostess_docker_image,
+                                    self.hostess_docker_tag),
                                 image_pull_policy="Always",
                                 resources=client.V1ResourceRequirements(
-                                    requests={"memory": "32Mi", "cpu": "0.001"},
+                                    requests={
+                                        "memory": "32Mi", "cpu": "0.001"
+                                    },
                                     limits={"memory": "128Mi", "cpu": "0.1"},
                                 ),
                                 volume_mounts=[
@@ -160,7 +176,10 @@ class RegistryMirror(object):
                             ),
                             client.V1Container(
                                 name="certificate-installation",
-                                args=["cp /source/tls.crt /target/tls.crt; while :; do sleep 2073600; done"],
+                                args=[
+                                    "cp /source/tls.crt /target/tls.crt;\
+                                    while :; do sleep 2073600; done"
+                                ],
                                 command=[
                                     "/bin/sh",
                                     "-c",
@@ -214,7 +233,7 @@ class RegistryMirror(object):
                             client.V1Volume(
                                 name="tls",
                                 secret=client.V1SecretVolumeSource(
-                                    docker_certificate_secret=self.docker_certificate_secret
+                                    secret_name=self.docker_certificate_secret
                                 )
                             )
                         ]
@@ -313,7 +332,9 @@ class RegistryMirror(object):
         return keypair
 
     def generate_stateful_set(self, stateful_set):
-        keypair = client.V1EnvVar(name="REGISTRY_PROXY_REMOTEURL", value="https://" + self.upstreamUrl)
+        keypair = client.V1EnvVar(
+            name="REGISTRY_PROXY_REMOTEURL",
+            value="https://" + self.upstreamUrl)
         if self.credentials_secret_name:
             keypair = self.handle_secrets(keypair)
 
@@ -350,7 +371,7 @@ class RegistryMirror(object):
                 client.V1Volume(
                     name="tls",
                     secret=client.V1SecretVolumeSource(
-                        docker_certificate_secret=self.docker_certificate_secret
+                        secret_name=self.docker_certificate_secret
                     ),
                 )
             )
@@ -436,9 +457,10 @@ class RegistryMirror(object):
                         volumes=volumes,
                     )
                 )
-        stateful_set.spec.update_strategy = client.V1beta1StatefulSetUpdateStrategy(
-            type="RollingUpdate",
-        )
+        stateful_set.spec.update_strategy = \
+            client.V1beta1StatefulSetUpdateStrategy(
+                type="RollingUpdate",
+            )
         return stateful_set
 
     def update_services(self, service, service_headless):

@@ -417,6 +417,11 @@ class RegistryMirror(object):
                                         mount_path="/var/lib/registry"
                                     ),
                                     client.V1VolumeMount(
+                                        name=self.cert_name,
+                                        mount_path="/etc/ssl/certs",
+                                        read_only=True
+                                    ),
+                                    client.V1VolumeMount(
                                         name="tls",
                                         mount_path="/etc/registry-certs",
                                         read_only=True

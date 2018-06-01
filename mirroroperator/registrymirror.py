@@ -130,8 +130,7 @@ class RegistryMirror(object):
                                 env=[
                                     client.V1EnvVar(
                                         name="LOCK_FILE",
-                                        value="/var/lock/hostess/\
-                                        mirror-hostess"),
+                                        value="/var/lock/hostess/mirror-hostess"),
                                     client.V1EnvVar(
                                         name="SERVICE_NAME",
                                         value=self.full_name),
@@ -177,8 +176,7 @@ class RegistryMirror(object):
                             client.V1Container(
                                 name="certificate-installation",
                                 args=[
-                                    "cp /source/tls.crt /target/tls.crt;\
-                                    while :; do sleep 2073600; done"
+                                    "cp /source/tls.crt /target/tls.crt; while :; do sleep 2073600; done"
                                 ],
                                 command=[
                                     "/bin/sh",
@@ -378,6 +376,25 @@ class RegistryMirror(object):
         else:
             raise NameError('No docker certificate secret specified')
 
+        volumes_to_mount = [
+            client.V1VolumeMount(
+                name="image-store",
+                mount_path="/var/lib/registry"
+            ),
+            client.V1VolumeMount(
+                name="tls",
+                mount_path="/etc/registry-certs",
+                read_only=True
+            )
+        ]
+        if self.ca_certificate_bundle:
+            volumes_to_mount.append(
+                client.V1VolumeMount(
+                    name=self.ca_certificate_bundle,
+                    mount_path="/etc/ssl/certs",
+                    read_only=True
+                )
+            )
         stateful_set.spec.template = client.V1PodTemplateSpec(
                     metadata=client.V1ObjectMeta(
                         labels=pod_labels
@@ -435,32 +452,14 @@ class RegistryMirror(object):
                                     limits={"cpu": "0.5",
                                             "memory": "500Mi"}
                                 ),
-                                volume_mounts=[
-                                    client.V1VolumeMount(
-                                        name="image-store",
-                                        mount_path="/var/lib/registry"
-                                    ),
-                                    client.V1VolumeMount(
-                                        name=self.ca_certificate_bundle,
-                                        mount_path="/etc/ssl/certs",
-                                        read_only=True
-                                    ),
-                                    client.V1VolumeMount(
-                                        name="tls",
-                                        mount_path="/etc/registry-certs",
-                                        read_only=True
-                                    )
-                                ],
+                                volume_mounts=volumes_to_mount,
                             )
                         ],
                         termination_grace_period_seconds=10,
                         volumes=volumes,
                     )
                 )
-        stateful_set.spec.update_strategy = \
-            client.V1beta1StatefulSetUpdateStrategy(
-                type="RollingUpdate",
-            )
+        stateful_set.spec.update_strategy = client.V1beta1StatefulSetUpdateStrategy(type="RollingUpdate",)
         return stateful_set
 
     def update_services(self, service, service_headless):

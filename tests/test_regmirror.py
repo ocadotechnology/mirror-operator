@@ -30,8 +30,7 @@ class CustomResourceTestCase(KubernetesTestCase):
         self.mirror = RegistryMirror(event_type="CREATED", **registry_kwargs)
 
         registry_kwargs_with_credential_secret = deepcopy(registry_kwargs)
-        registry_kwargs_with_credential_secret['spec']["credentialsSecret"] = \
-            "internal-mirror"
+        registry_kwargs_with_credential_secret['spec']["credentialsSecret"] = "internal-mirror"
         registry_kwargs_with_credential_secret.update(self.env_var_dict)
         self.mirror_with_credential_secret = RegistryMirror(
             event_type="CREATED", **registry_kwargs_with_credential_secret)
@@ -148,8 +147,8 @@ class CustomResourceTestCase(KubernetesTestCase):
 
     @responses.activate
     def test_update_statefulset_credentials(self):
-        '''Should create the stateful set and create a secret containing\
-            the right url'''
+        '''Should create the stateful set and create a secret containing
+        the right url'''
         responses.add(
             'POST',
             '/apis/apps/v1beta1/namespaces/default/statefulsets',

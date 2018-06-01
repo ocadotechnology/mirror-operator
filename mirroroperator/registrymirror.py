@@ -523,8 +523,11 @@ class RegistryMirror(object):
         )
         if not stateful_set:
             stateful_set = self.generate_stateful_set(empty_stateful_set)
-            self.run_action_and_parse_error(self.apps_api.create_namespaced_stateful_set,
-                                            self.namespace, stateful_set)
+            self.run_action_and_parse_error(
+                self.apps_api.create_namespaced_stateful_set,
+                self.namespace,
+                stateful_set
+            )
             LOGGER.info("Stateful set created")
         else:
             stateful_set = self.generate_stateful_set(stateful_set)

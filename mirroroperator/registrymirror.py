@@ -373,8 +373,6 @@ class RegistryMirror(object):
                     ),
                 )
             )
-        else:
-            raise NameError('No docker certificate secret specified')
 
         volumes_to_mount = [
             client.V1VolumeMount(

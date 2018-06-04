@@ -27,6 +27,8 @@ class MirrorOperator(object):
             docker_certificate_secret(used in RegistryMirror),
             ca_certificate_bundle(optional)
         """
+        if not env_vars.get("docker_certificate_secret"):
+            raise TypeError("Missing docker certificate secret")
         self.registry_mirror_vars = env_vars
         kubernetes.config.load_incluster_config()
         self.crd_api = kubernetes.client.ExtensionsV1beta1Api()

@@ -364,15 +364,14 @@ class RegistryMirror(object):
                     )
                 )
             ]
-        if self.docker_certificate_secret:
-            volumes.append(
-                client.V1Volume(
-                    name="tls",
-                    secret=client.V1SecretVolumeSource(
-                        secret_name=self.docker_certificate_secret
-                    ),
-                )
+        volumes.append(
+            client.V1Volume(
+                name="tls",
+                secret=client.V1SecretVolumeSource(
+                    secret_name=self.docker_certificate_secret
+                ),
             )
+        )
 
         volumes_to_mount = [
             client.V1VolumeMount(

@@ -30,8 +30,8 @@ class OperatorTestCase(KubernetesTestCase):
             "hostess_docker_image": "ocadotechnology/mirror-hostess",
             "hostess_docker_tag": None,
             "image_pull_secrets": None,
-            "secret_name": None,
-            "cert_name": None,
+            "docker_certificate_secret": VALID_SECRET,
+            "ca_certificate_bundle": None,
         }
         self.operator = MirrorOperator(env_var_dict)
 

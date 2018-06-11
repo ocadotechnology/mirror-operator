@@ -56,6 +56,18 @@ spec:
   upstreamUrl: hub.docker.io
 ```
 
+You can, optionally, specify a masqueradeUrl in the RegistryMirror object spec. If you do this then the daemonsets that run the [mirror-hostess][mirror-hostess] docker image will add a hosts entry to each node that points the service associated with a RegistryMirror to the hostname in the masqueradeUrl. This allows you to masquerade one hostname for a mirror to another. In the following example local.docker.io would point to the service IP:
+
+```yaml
+apiVersion: k8s.osp.tech/v1
+kind: RegistryMirror
+metadata:
+  name: docker
+spec:
+  upstreamUrl: hub.docker.io
+  masqueradeUrl: local.docker.io
+```
+
 If you have a username/password which must be used to access the upstream mirror, you can add a `credentialsSecret` key to the spec, who's value should
 be the name of the secret, e.g:
 ```yaml
@@ -68,9 +80,10 @@ spec:
   credentialsSecret: internal-mirror
 ```
 
-The operator will then deploy a daemon set, stateful set, service and headless service in whichever namespace is configured. We generally expect this to be default. These will all be named `registry-mirror-<name>`, with the exception of the headless service which will be named `registry-mirror-<name>-headless`.
+The operator will then deploy a daemonset, statefulset, service and headless service in whichever namespace is configured. We generally expect this to be default. These will all be named `registry-mirror-<name>`, with the exception of the headless service which will be named `registry-mirror-<name>-headless`.
 You can get all the elements of your mirror using - `kubectl get ds,statefulset,svc,registrymirror -l mirror=<name> -n default`.
 
 If you wish to update the secret or URL, all you need to do is change it in the `RegistryMirror` manifest and the operator will handle updates. 
 
 [operators]: https://coreos.com/blog/introducing-operators.html
+[mirror-hostess]: https://github.com/ocadotechnology/mirror-hostess

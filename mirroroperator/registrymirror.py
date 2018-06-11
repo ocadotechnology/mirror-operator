@@ -27,6 +27,7 @@ class RegistryMirror(object):
         self.daemon_set_name = self.full_name + "-utils"
         self.apiVersion = kwargs.get("apiVersion")
         self.upstreamUrl = kwargs.get("spec", {}).get("upstreamUrl")
+        self.masqueradeUrl = kwargs.get("spec", {}).get("masqueradeUrl", "mirror-"+self.upstreamUrl)
         self.credentials_secret_name = kwargs.get(
             "spec", {}).get("credentialsSecret")
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
@@ -139,7 +140,7 @@ class RegistryMirror(object):
                                         value=self.namespace),
                                     client.V1EnvVar(
                                         name="SHADOW_FQDN",
-                                        value="mirror-"+self.upstreamUrl),
+                                        value=self.masqueradeUrl),
                                     client.V1EnvVar(
                                         name="HOSTS_FILE",
                                         value="/etc/hosts_from_host"),
@@ -225,7 +226,7 @@ class RegistryMirror(object):
                             client.V1Volume(
                                 name="docker-certs",
                                 host_path=client.V1HostPathVolumeSource(
-                                    path="/etc/docker/certs.d/mirror-{}".format(self.upstreamUrl)
+                                    path="/etc/docker/certs.d/{}".format(self.masqueradeUrl)
                                 ),
                             ),
                             client.V1Volume(

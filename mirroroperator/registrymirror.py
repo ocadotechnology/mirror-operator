@@ -346,6 +346,8 @@ class RegistryMirror(object):
                client.V1EnvVar(name="REGISTRY_HTTP_TLS_KEY",
                                value="/etc/registry-certs/tls.key"),
                keypair,
+               client.V1EnvVar(name="REGISTRY_LOG_FORMATTER",
+                               value="logstash"),
                client.V1EnvVar(name="REGISTRY_STORAGE_DELETE_ENABLED",
                                value="true"),
                client.V1EnvVar(name="REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY",

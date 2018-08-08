@@ -202,25 +202,7 @@ valid_secret = {
     },
     "type": "Opaque"
 }
-url = "https://{}:{}@{}".format(username, password, "hubtest")
-url = base64.b64encode(url.encode('utf-8')).decode('utf-8')
-valid_reg_secret = {
-    "apiVersion": "v1",
-    "data": {
-        "url": url
-    },
-    "kind": "Secret",
-    "metadata": {
-        "creationTimestamp": "2017-09-13T10:20:26Z",
-        "name": "registry-mirror-hub",
-        "namespace": "default",
-        "resourceVersion": "7889",
-        "selfLink": "/api/v1/namespaces/default/secrets/internal-mirror",
-        "uid": "294e16e7-986d-11e7-9c1f-0800275e72fe"
-    },
-    "type": "Opaque"
-}
-VALID_REG_SECRET = json.dumps(valid_reg_secret)
+
 VALID_SECRET = json.dumps(valid_secret)
 
 INVALID_SECRET = """

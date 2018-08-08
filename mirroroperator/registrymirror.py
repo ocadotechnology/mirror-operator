@@ -253,106 +253,47 @@ class RegistryMirror(object):
         service_headless.spec.type = "ClusterIP"
         return service_headless
 
-    def generate_new_auth_url(self, credentials_secret):
-        """
-        Method which, given a credentials secret (secret named <self.credentials_secret_name>):
-        - decodes the username/password
-        - if they are valid, create a new authed upstream url
-        Args:
-            credentials_secret: V1Secret
-
-        Returns: base64-encoded str or None if the url was not valid
-
-        """
-        encoded_user = credentials_secret.data.get("username")
-        encoded_pass = credentials_secret.data.get("password")
-        url = None
-        if not (encoded_pass and encoded_user):
-            # log an error, keep the url at none
-            LOGGER.error("Secret %s does not contain username/password, defaulting to %s",
-                         self.credentials_secret_name, self.upstreamUrl)
-        else:
-            # decode the username, update the url
-            username = base64.b64decode(encoded_user).decode('utf-8')
-            password = base64.b64decode(encoded_pass).decode('utf-8')
-            decoded_url = "https://{}:{}@{}".format(username, password, self.upstreamUrl)
-            url = base64.b64encode(decoded_url.encode('utf-8')).decode('utf-8')
-
-        return url
-
-    def handle_secrets(self, keypair):
-        credentials_secret = self.run_action_and_parse_error(self.core_api.read_namespaced_secret,
+    def handle_proxy_credentials(self, env):
+        credentials_secret = None
+        if self.credentials_secret_name:
+            credentials_secret = self.run_action_and_parse_error(self.core_api.read_namespaced_secret,
                                                              self.credentials_secret_name,
                                                              self.namespace)
-        reg_secret = self.run_action_and_parse_error(self.core_api.read_namespaced_secret,
-                                                     self.full_name, self.namespace)
-        valid_secret = None
-        url = None
-        if credentials_secret:
-            # create a new url
-            url = self.generate_new_auth_url(credentials_secret)
+        if not credentials_secret:
+            LOGGER.error("No secret named %s was found in the %s namespace, will use unauth access",
+                         self.credentials_secret_name, self.namespace)
+            return env
 
-        else:
-            LOGGER.error("No secret named %s was found, will use unauth access",
+        encoded_user = credentials_secret.data.get("username")
+        encoded_pass = credentials_secret.data.get("password")
+
+        if not (encoded_user and encoded_pass):
+            LOGGER.error("Secret %s does not contain username/password",
                          self.credentials_secret_name)
+            return env
+        env.append(client.V1EnvVar(name="REGISTRY_PROXY_USERNAME",
+                                   value=None,
+                                   value_from=client.V1EnvVarSource(
+                                        secret_key_ref=client.V1SecretKeySelector(
+                                            key="username",
+                                            name=self.credentials_secret_name
+                                        )
+                                   ))
+                  )
+        env.append(client.V1EnvVar(name="REGISTRY_PROXY_PASSWORD",
+                                   value=None,
+                                   value_from=client.V1EnvVarSource(
+                                        secret_key_ref=client.V1SecretKeySelector(
+                                            key="password",
+                                            name=self.credentials_secret_name
+                                        )
+                                   ))
+                  )
+        LOGGER.info("Secret selected + env vars set successfully")
+        return env
 
-        if url:
-            if reg_secret:
-                reg_secret.metadata = self.metadata
-                reg_secret.data = {"url": url}
-                LOGGER.info("Updating the secret %s", self.full_name)
-                valid_secret = self.run_action_and_parse_error(
-                    self.core_api.replace_namespaced_secret,
-                    self.full_name, self.namespace, reg_secret
-                )
-            else:
-                # create a new one
-                reg_secret = client.V1Secret(
-                    metadata=self.metadata,
-                    data={"url": url}
-                )
-                LOGGER.info("Creating new secret %s", self.full_name)
-                valid_secret = self.run_action_and_parse_error(self.core_api.create_namespaced_secret,
-                                                               self.namespace, reg_secret)
-
-        if valid_secret:
-            keypair.value = None
-            keypair.value_from = client.V1EnvVarSource(
-                secret_key_ref=client.V1SecretKeySelector(
-                    key="url",
-                    name=valid_secret.metadata.name
-                )
-            )
-            LOGGER.info("Secret selected + env var set successfully")
-        else:
-            LOGGER.error("Valid authenticated url secret could not be created or found, value will default to upstream url %s",
-                         self.upstreamUrl)
-
-        return keypair
 
     def generate_stateful_set(self, stateful_set):
-        keypair = client.V1EnvVar(
-            name="REGISTRY_PROXY_REMOTEURL",
-            value="https://" + self.upstreamUrl)
-        if self.credentials_secret_name:
-            keypair = self.handle_secrets(keypair)
-
-        env = [client.V1EnvVar(name="REGISTRY_HTTP_ADDR",
-                               value=":5000"),
-               client.V1EnvVar(name="REGISTRY_HTTP_DEBUG_ADDR",
-                               value="localhost:6000"),
-               client.V1EnvVar(name="REGISTRY_HTTP_TLS_CERTIFICATE",
-                               value="/etc/registry-certs/tls.crt"),
-               client.V1EnvVar(name="REGISTRY_HTTP_TLS_KEY",
-                               value="/etc/registry-certs/tls.key"),
-               keypair,
-               client.V1EnvVar(name="REGISTRY_LOG_FORMATTER",
-                               value="logstash"),
-               client.V1EnvVar(name="REGISTRY_STORAGE_DELETE_ENABLED",
-                               value="true"),
-               client.V1EnvVar(name="REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY",
-                               value="/var/lib/registry")
-               ]
         stateful_set.metadata = self.metadata
         stateful_set.spec.replicas = 2
         pod_labels = {'component': 'registry'}
@@ -395,6 +336,26 @@ class RegistryMirror(object):
                     read_only=True
                 )
             )
+
+        env = [client.V1EnvVar(name="REGISTRY_PROXY_REMOTEURL",
+                               value="https://" + self.upstreamUrl),
+               client.V1EnvVar(name="REGISTRY_HTTP_ADDR",
+                               value=":5000"),
+               client.V1EnvVar(name="REGISTRY_HTTP_DEBUG_ADDR",
+                               value="localhost:6000"),
+               client.V1EnvVar(name="REGISTRY_HTTP_TLS_CERTIFICATE",
+                               value="/etc/registry-certs/tls.crt"),
+               client.V1EnvVar(name="REGISTRY_HTTP_TLS_KEY",
+                               value="/etc/registry-certs/tls.key"),
+               client.V1EnvVar(name="REGISTRY_LOG_FORMATTER",
+                               value="logstash"),
+               client.V1EnvVar(name="REGISTRY_STORAGE_DELETE_ENABLED",
+                               value="true"),
+               client.V1EnvVar(name="REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY",
+                               value="/var/lib/registry")
+               ]
+        env = self.handle_proxy_credentials(env)
+
         stateful_set.spec.template = client.V1PodTemplateSpec(
                     metadata=client.V1ObjectMeta(
                         labels=pod_labels

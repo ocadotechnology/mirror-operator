@@ -73,7 +73,7 @@ class OperatorTestCase(KubernetesTestCase):
 
     @responses.activate
     def test_will_read_crds_blanks_dont_exist(self):
-        '''Should listen to CRDs being streamed + call apis appropriately. In this case the objects don't alreadu exist'''
+        '''Should listen to CRDs being streamed + call apis appropriately. In this case the objects don't already exist'''
         stream_generator = stream_mock()
         responses.add('GET', '/api/v1/namespaces/default/services/registry-mirror-hub', status=404, body='{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"services \\"registry-mirror-internal\\" not found","reason":"NotFound","details":{"name":"registry-mirror-internal","kind":"services"},"code":404}')
         responses.add('GET', '/api/v1/namespaces/default/services/registry-mirror-hub-headless', status=404)

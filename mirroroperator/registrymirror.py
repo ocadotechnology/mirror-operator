@@ -32,6 +32,16 @@ class RegistryMirror(object):
             "spec", {}).get("credentialsSecret")
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
+        self.volume_claim_spec = kwargs.get(
+            "spec",
+            {},
+        ).get(
+            "volumeClaimTemplate",
+            {},
+        ).get(
+            "spec",
+            {},
+        )
 
         self.labels = {
             "app": "docker-registry",
@@ -294,6 +304,15 @@ class RegistryMirror(object):
 
 
     def generate_stateful_set(self):
+
+        volume_claim_spec = client.V1PersistentVolumeClaimSpec(**self.volume_claim_spec)
+        if not volume_claim_spec.access_modes:
+            volume_claim_spec.access_modes = ["ReadWriteOnce"]
+        if not volume_claim_spec.resources:
+            volume_claim_spec.resources = client.V1ResourceRequirements(
+                requests={"storage": "20Gi"}
+            )
+
         stateful_set = client.V1beta1StatefulSet(
             metadata=self.metadata,
             spec=client.V1beta1StatefulSetSpec(
@@ -305,15 +324,11 @@ class RegistryMirror(object):
                     metadata=client.V1ObjectMeta(
                         name="image-store",
                     ),
-                    spec=client.V1PersistentVolumeClaimSpec(
-                        access_modes=["ReadWriteOnce"],
-                        resources=client.V1ResourceRequirements(
-                            requests={"storage": "20Gi"}
-                        )
-                    )
+                    spec=volume_claim_spec,
                 )]
             )
         )
+
         stateful_set.spec.replicas = 2
         pod_labels = {'component': 'registry'}
         pod_labels.update(self.labels)

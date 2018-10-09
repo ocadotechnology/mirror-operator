@@ -80,6 +80,21 @@ spec:
   credentialsSecret: internal-mirror
 ```
 
+If you want to adjust the amount of storage allocated, you can add a `volumeClaimTemplate` key to the spec. The value should be the same as a [PersistentVolumeClaim]https://v1-8.docs.kubernetes.io/docs/api-reference/v1.8/#persistentvolumeclaim-v1-core) object. e.g:
+```yaml
+apiVersion: k8s.osp.tech/v1
+kind: RegistryMirror
+metadata:
+  name: internal
+spec:
+  upstreamUrl: hub.docker.io
+  volumeClaimTemplate:
+    spec:
+      resources:
+        requests:
+          storage: 20Gi
+```
+
 The operator will then deploy a daemonset, statefulset, service and headless service in whichever namespace is configured. We generally expect this to be default. These will all be named `registry-mirror-<name>`, with the exception of the headless service which will be named `registry-mirror-<name>-headless`.
 You can get all the elements of your mirror using - `kubectl get ds,statefulset,svc,registrymirror -l mirror=<name> -n default`.
 

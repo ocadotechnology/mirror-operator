@@ -32,6 +32,16 @@ class RegistryMirror(object):
             "spec", {}).get("credentialsSecret")
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
+        self.volume_claim_spec = kwargs.get(
+            "spec",
+            {},
+        ).get(
+            "volumeClaimTemplate",
+            {},
+        ).get(
+            "spec",
+            {},
+        )
 
         self.labels = {
             "app": "docker-registry",
@@ -293,8 +303,32 @@ class RegistryMirror(object):
         return env
 
 
-    def generate_stateful_set(self, stateful_set):
-        stateful_set.metadata = self.metadata
+    def generate_stateful_set(self):
+
+        volume_claim_spec = client.V1PersistentVolumeClaimSpec(**self.volume_claim_spec)
+        if not volume_claim_spec.access_modes:
+            volume_claim_spec.access_modes = ["ReadWriteOnce"]
+        if not volume_claim_spec.resources:
+            volume_claim_spec.resources = client.V1ResourceRequirements(
+                requests={"storage": "20Gi"}
+            )
+
+        stateful_set = client.V1beta1StatefulSet(
+            metadata=self.metadata,
+            spec=client.V1beta1StatefulSetSpec(
+                # we can't update service name or pod management policy
+                service_name=self.full_name + "-headless",
+                pod_management_policy="Parallel",
+                # we can't update volume claim templates
+                volume_claim_templates=[client.V1PersistentVolumeClaim(
+                    metadata=client.V1ObjectMeta(
+                        name="image-store",
+                    ),
+                    spec=volume_claim_spec,
+                )]
+            )
+        )
+
         stateful_set.spec.replicas = 2
         pod_labels = {'component': 'registry'}
         pod_labels.update(self.labels)
@@ -463,28 +497,8 @@ class RegistryMirror(object):
             LOGGER.info("Headless service replaced")
 
     def update_stateful_set(self, stateful_set):
-        empty_stateful_set = client.V1beta1StatefulSet(
-            metadata=self.metadata,
-            spec=client.V1beta1StatefulSetSpec(
-                # we can't update service name or pod management policy
-                service_name=self.full_name + "-headless",
-                pod_management_policy="Parallel",
-                # we can't update volume claim templates
-                volume_claim_templates=[client.V1PersistentVolumeClaim(
-                    metadata=client.V1ObjectMeta(
-                        name="image-store",
-                    ),
-                    spec=client.V1PersistentVolumeClaimSpec(
-                        access_modes=["ReadWriteOnce"],
-                        resources=client.V1ResourceRequirements(
-                            requests={"storage": "20Gi"}
-                        )
-                    )
-                )]
-            )
-        )
         if not stateful_set:
-            stateful_set = self.generate_stateful_set(empty_stateful_set)
+            stateful_set = self.generate_stateful_set()
             self.run_action_and_parse_error(
                 self.apps_api.create_namespaced_stateful_set,
                 self.namespace,
@@ -492,7 +506,7 @@ class RegistryMirror(object):
             )
             LOGGER.info("Stateful set created")
         else:
-            stateful_set = self.generate_stateful_set(stateful_set)
+            stateful_set = self.generate_stateful_set()
             self.run_action_and_parse_error(
                 self.apps_api.replace_namespaced_stateful_set,
                 stateful_set.metadata.name, self.namespace, stateful_set)

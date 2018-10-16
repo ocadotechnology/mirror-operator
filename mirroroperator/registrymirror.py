@@ -255,7 +255,7 @@ class RegistryMirror(object):
         return daemon_set
 
     def generate_service(self, service):
-        service.spec.type = "NodePort"
+        service.spec.type = "ClusterIP"
         return service
 
     def generate_headless_service(self, service_headless):

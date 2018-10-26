@@ -1,3 +1,4 @@
+import bitmath
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 import logging
@@ -13,7 +14,6 @@ HEALTH_CHECK_PATH = "/health-check"
 SHARED_CERT_NAME = "shared-certs"
 SHARED_CERT_MOUNT_PATH = "/etc/shared-certs"
 CERT_FILE = "ca-certificates.crt"
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -27,20 +27,30 @@ class RegistryMirror(object):
         self.hostess_docker_image = hostess_docker_image
         self.hostess_docker_tag = hostess_docker_tag
         self.docker_certificate_secret = docker_certificate_secret
-        self.kind = kwargs.get("kind")
-        self.name = kwargs.get("metadata", {}).get("name")
-        self.uid = kwargs.get("metadata", {}).get("uid")
-        self.full_name = "registry-mirror-{}".format(self.name)
+        kind = kwargs.get("kind")
+        name = kwargs.get("metadata", {}).get("name")
+        uid = kwargs.get("metadata", {}).get("uid")
+        self.full_name = "registry-mirror-{}".format(name)
         self.daemon_set_name = self.full_name + "-utils"
         self.nginx_config_secret_name = self.full_name + "-secret"
         self.apiVersion = kwargs.get("apiVersion")
-        self.upstreamUrl = kwargs.get("spec", {}).get("upstreamUrl")
-        self.masqueradeUrl = kwargs.get("spec", {}).get("masqueradeUrl", "mirror-"+self.upstreamUrl)
+        upstream_url = kwargs.get("spec", {}).get("upstreamUrl")
+
+        self.masquerade_url = kwargs.get("spec", {}).get("masqueradeUrl", "mirror-"+upstream_url)
+
         self.credentials_secret_name = kwargs.get(
             "spec", {}).get("credentialsSecret")
+
+        self.ss_ds_labels = kwargs["ss_ds_labels"] or ""
+        self.ss_ds_template_labels = kwargs["ss_ds_template_labels"] or ""
+        self.ss_ds_tolerations = []
+        if kwargs["ss_ds_tolerations"] is not None:
+            for t in kwargs["ss_ds_tolerations"]:
+                self.ss_ds_tolerations.append(client.V1Toleration(**t))
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
-        self.volume_claim_spec = kwargs.get(
+
+        self.volume_claim_spec = client.V1PersistentVolumeClaimSpec(**kwargs.get(
             "spec",
             {},
         ).get(
@@ -49,10 +59,36 @@ class RegistryMirror(object):
         ).get(
             "spec",
             {},
-        )
+        ))
+        if not self.volume_claim_spec.access_modes:
+            self.volume_claim_spec.access_modes = ["ReadWriteOnce"]
+        if not self.volume_claim_spec.resources:
+            self.volume_claim_spec.resources = client.V1ResourceRequirements(
+                requests={"storage": "20Gi"}
+            ).to_dict()
+
+        cache_size_limit = int(bitmath.parse_string_unsafe(self.volume_claim_spec.resources['requests']['storage']).to_GB() * 0.8)
 
         self.nginx_config_template = '''
-        proxy_cache_path {cache_dir} levels=1:2 inactive=7d use_temp_path=off keys_zone={zone}:10m;
+        log_format json_combined escape=json
+          '{{{{'
+              '"http": {{{{'
+                  '"request": {{{{'
+                      '"headers": {{{{'
+                          '"host": "$host",'
+                          '"x-forwarded-for": "$proxy_add_x_forwarded_for"'
+                      '}}}},'
+                      '"method": "$request_method",'
+                      '"uri": "$request_uri"'
+                  '}}}},'
+                  '"response": {{{{'
+                      '"status-code": $status'
+                  '}}}}'
+              '}}}},'
+              '"username": "$remote_user"'
+          '}}}}';
+
+        proxy_cache_path {cache_dir} levels=1:2 inactive=7d use_temp_path=off keys_zone={zone}:10m max_size={cache_size_limit}g;
         server {{{{
 
             listen                5000 ssl;
@@ -60,9 +96,14 @@ class RegistryMirror(object):
             ssl_certificate       {registry_cert_dir}/tls.crt;
             ssl_certificate_key   {registry_cert_dir}/tls.key;
 
+            access_log /var/log/nginx/access.log json_combined;
+
             location {healthcheck_path} {{{{
                 return 200 '';
             }}}}
+
+            #resolver;
+            set $upstream_endpoint https://{upstream_fqdn};
 
             location / {{{{
                 proxy_ssl_trusted_certificate {shared_cert_mount_path}/{cert_file};
@@ -70,7 +111,7 @@ class RegistryMirror(object):
                     deny all;
                 }}}}
 
-                proxy_pass                    https://{upstream_fqdn};
+                proxy_pass                    $upstream_endpoint;
                 proxy_ssl_verify              on;
                 proxy_ssl_verify_depth        9;
                 proxy_ssl_session_reuse       on;
@@ -82,28 +123,30 @@ class RegistryMirror(object):
                 proxy_set_header              X-Forwarded-For $proxy_add_x_forwarded_for;
             }}}}
         }}}}'''.format(registry_cert_dir=REGISTRY_CERT_DIR, cache_dir=CACHE_DIR,
-                       upstream_fqdn=self.upstreamUrl, zone="the_zone",
+                       cache_size_limit=cache_size_limit,
+                       upstream_fqdn=upstream_url, zone="the_zone",
                        healthcheck_path=HEALTH_CHECK_PATH,
                        shared_cert_mount_path=SHARED_CERT_MOUNT_PATH, cert_file=CERT_FILE)
 
         self.labels = {
             "app": "docker-registry",
-            "mirror": self.name,
+            "mirror": name,
         }
 
         self.metadata = client.V1ObjectMeta(
             namespace=self.namespace,
             name=self.full_name,
             labels=self.labels,
-            owner_references=[
-                client.V1OwnerReference(
-                    api_version=self.apiVersion,
-                    name=self.name,
-                    kind=self.kind,
-                    uid=self.uid,
-                )
-            ]
+            # owner_references=[
+            #     client.V1OwnerReference(
+            #         api_version=self.apiVersion,
+            #         name=name,
+            #         kind=kind,
+            #         uid=uid,
+            #     )
+            #]
         )
+
         self.core_api = client.CoreV1Api()
         self.apps_api = client.AppsV1beta1Api()
         self.ext_api = client.ExtensionsV1beta1Api()
@@ -176,8 +219,12 @@ class RegistryMirror(object):
     def generate_daemon_set(self, daemon_set):
         ds_pod_labels = copy.deepcopy(self.labels)
         ds_pod_labels["component"] = "hostess-certificate"
+        ds_pod_labels.update(self.ss_ds_template_labels)
+        ds_labels = copy.deepcopy(self.labels)
+        ds_labels.update(self.ss_ds_labels)
         daemon_set.metadata = copy.deepcopy(self.metadata)
         daemon_set.metadata.name = self.daemon_set_name
+        daemon_set.metadata.labels = ds_labels
         daemon_set.spec = client.V1beta1DaemonSetSpec(
                 min_ready_seconds=10,
                 template=client.V1PodTemplateSpec(
@@ -200,7 +247,7 @@ class RegistryMirror(object):
                                         value=self.namespace),
                                     client.V1EnvVar(
                                         name="SHADOW_FQDN",
-                                        value=self.masqueradeUrl),
+                                        value=self.masquerade_url),
                                     client.V1EnvVar(
                                         name="HOSTS_FILE",
                                         value="/etc/hosts_from_host"),
@@ -215,7 +262,7 @@ class RegistryMirror(object):
                                 image_pull_policy="Always",
                                 resources=client.V1ResourceRequirements(
                                     requests={
-                                        "memory": "32Mi", "cpu": "0.001"
+                                        "memory": "64Mi", "cpu": "0.001"
                                     },
                                     limits={"memory": "128Mi", "cpu": "0.1"},
                                 ),
@@ -261,41 +308,41 @@ class RegistryMirror(object):
                                 ],
                             )
                         ],
+                        tolerations=self.ss_ds_tolerations,
                         image_pull_secrets=[{"name": name} for name in
                                             self.image_pull_secrets.split(",")],
                         service_account_name="mirror-hostess",
                         termination_grace_period_seconds=2,
                         volumes=[client.V1Volume(
-                            name="etc-hosts",
-                            host_path=client.V1HostPathVolumeSource(
-                                path="/etc/hosts"
-                            )
-                        ),
-                            client.V1Volume(
-                                name="etc-hosts-backup",
-                                host_path=client.V1HostPathVolumeSource(
-                                    path="/etc/hosts.backup"
-                                )
-                            ),
-                            client.V1Volume(
-                                name="lock",
-                                host_path=client.V1HostPathVolumeSource(
-                                    path="/var/lock/mirror-hostess"
-                                ),
-                            ),
-                            client.V1Volume(
-                                name="docker-certs",
-                                host_path=client.V1HostPathVolumeSource(
-                                    path="/etc/docker/certs.d/{}".format(self.masqueradeUrl)
-                                ),
-                            ),
-                            client.V1Volume(
-                                name="tls",
-                                secret=client.V1SecretVolumeSource(
-                                    secret_name=self.docker_certificate_secret
-                                )
-                            )
-                        ]
+                                   name="etc-hosts",
+                                   host_path=client.V1HostPathVolumeSource(
+                                       path="/etc/hosts"
+                                   )
+                                 ),
+                                 client.V1Volume(
+                                     name="etc-hosts-backup",
+                                     host_path=client.V1HostPathVolumeSource(
+                                         path="/etc/hosts.backup"
+                                     )
+                                 ),
+                                 client.V1Volume(
+                                     name="lock",
+                                     host_path=client.V1HostPathVolumeSource(
+                                         path="/var/lock/mirror-hostess"
+                                     ),
+                                 ),
+                                 client.V1Volume(
+                                     name="docker-certs",
+                                     host_path=client.V1HostPathVolumeSource(
+                                         path="/etc/docker/certs.d/{}".format(self.masquerade_url)
+                                     ),
+                                 ),
+                                 client.V1Volume(
+                                     name="tls",
+                                     secret=client.V1SecretVolumeSource(
+                                         secret_name=self.docker_certificate_secret
+                                     )
+                                 )]
                     )
                 ),
                 update_strategy=client.V1beta1DaemonSetUpdateStrategy(
@@ -337,24 +384,6 @@ class RegistryMirror(object):
         return (the_user, the_pass)
 
     def generate_stateful_set(self):
-        script = '''
-        TEMPFILE=$(mktemp)
-        cat /etc/ssl/certs/{cert_file} >> $TEMPFILE
-        if [ -d {upstream_cert_dir} ]; then
-          cat {upstream_cert_dir}/{cert_file} >> $TEMPFILE
-        fi
-        mv $TEMPFILE {shared_cert_mount_path}/{cert_file}
-        '''.format(upstream_cert_dir=UPSTREAM_CERT_DIR, cert_file=CERT_FILE,
-                   shared_cert_mount_path=SHARED_CERT_MOUNT_PATH)
-        volume_claim_spec = client.V1PersistentVolumeClaimSpec(**self.volume_claim_spec)
-        if not volume_claim_spec.access_modes:
-            volume_claim_spec.access_modes = ["ReadWriteOnce"]
-
-        if not volume_claim_spec.resources:
-            volume_claim_spec.resources = client.V1ResourceRequirements(
-                requests={"storage": "20Gi"}
-            ).to_dict()
-
         stateful_set = client.V1beta1StatefulSet(
             metadata=self.metadata,
             spec=client.V1beta1StatefulSetSpec(
@@ -366,14 +395,17 @@ class RegistryMirror(object):
                     metadata=client.V1ObjectMeta(
                         name="image-store",
                     ),
-                    spec=volume_claim_spec,
+                    spec=self.volume_claim_spec,
                 )]
             )
         )
 
         stateful_set.spec.replicas = 2
+        ss_labels = copy.deepcopy(self.labels)
+        ss_labels.update(self.ss_ds_labels)
         pod_labels = {'component': 'registry'}
         pod_labels.update(self.labels)
+        pod_labels.update(self.ss_ds_template_labels)
         volumes = []
         if self.ca_certificate_bundle:
             volumes = [
@@ -407,15 +439,20 @@ class RegistryMirror(object):
                 empty_dir=client.V1EmptyDirVolumeSource()
             )
         )
-
+        volumes.append(
+            client.V1Volume(
+                name='nginx-config-edited',
+                empty_dir=client.V1EmptyDirVolumeSource()
+            )
+        )
         volumes_to_mount = [
             client.V1VolumeMount(
                 name="image-store",
-                mount_path"/var/lib/registry"
+                mount_path=CACHE_DIR
             ),
             client.V1VolumeMount(
                 name="tls",
-                mount_path="/etc/registry-certs",
+                mount_path=REGISTRY_CERT_DIR,
                 read_only=True
             ),
             client.V1VolumeMount(
@@ -424,7 +461,7 @@ class RegistryMirror(object):
                 read_only=True,
             ),
             client.V1VolumeMount(
-                name="nginx-config",
+                name="nginx-config-edited",
                 mount_path="/etc/nginx/conf.d",
                 read_only=True
             )
@@ -452,7 +489,22 @@ class RegistryMirror(object):
             limits={"cpu": "0.5",
                     "memory": "500Mi"}
         )
-
+        script = '''
+                TEMPFILE=$(mktemp)
+                cat /etc/ssl/certs/{cert_file} >> $TEMPFILE
+                if [ -d {upstream_cert_dir} ]; then
+                  cat {upstream_cert_dir}/{cert_file} >> $TEMPFILE
+                fi
+                mv $TEMPFILE {shared_cert_mount_path}/{cert_file}
+                '''.format(upstream_cert_dir=UPSTREAM_CERT_DIR, cert_file=CERT_FILE,
+                           shared_cert_mount_path=SHARED_CERT_MOUNT_PATH)
+        script_munge_nameservers = '''
+                cp /etc/nginx/conf.d/default.conf /tmp/nginx/default.conf
+                NAMESERVERS=$(cat /etc/resolv.conf | grep "nameserver" | awk '{{print $2}}' | tr '\n' ' ')
+                if [ ! "$NAMESERVERS" == "" ]; then
+                    sed -E -i "s/(#)(resolver)(;)/\\2 ${NAMESERVERS}\\3/" /tmp/nginx/default.conf
+                fi
+                '''
         stateful_set.spec.template = client.V1PodTemplateSpec(
                     metadata=client.V1ObjectMeta(
                         labels=pod_labels
@@ -465,6 +517,24 @@ class RegistryMirror(object):
                                 command=["/bin/sh"],
                                 args=["-c", script],
                                 volume_mounts=generate_ca_certs_volume_mounts,
+                                resources=resources,
+                            ),
+                            client.V1Container(
+                                name="get-nameservers",
+                                image="busybox",
+                                command=["/bin/sh"],
+                                args=["-c", script_munge_nameservers],
+                                volume_mounts=[
+                                    client.V1VolumeMount(
+                                        name="nginx-config",
+                                        mount_path="/etc/nginx/conf.d"
+                                    ),
+                                    client.V1VolumeMount(
+                                        name="nginx-config-edited",
+                                        mount_path="/tmp/nginx"
+                                    )
+
+                                ],
                                 resources=resources,
                             )
                         ],
@@ -489,11 +559,13 @@ class RegistryMirror(object):
                                 volume_mounts=volumes_to_mount,
                             ),
                         ],
+                        tolerations=self.ss_ds_tolerations,
                         termination_grace_period_seconds=10,
                         volumes=volumes,
                     )
                 )
         stateful_set.spec.update_strategy = client.V1beta1StatefulSetUpdateStrategy(type="RollingUpdate",)
+        stateful_set.metadata.labels = ss_labels
         return stateful_set
 
     def generate_secret(self, secret):
@@ -518,9 +590,8 @@ class RegistryMirror(object):
             )
         )
         if not service:
-            service = self.generate_service(empty_service)
             self.run_action_and_parse_error(self.core_api.create_namespaced_service,
-                                            self.namespace, service)
+                                            self.namespace, empty_service)
             LOGGER.info("Service created")
 
         else:

@@ -1,3 +1,4 @@
+import ast
 import kubernetes
 import logging
 import time
@@ -21,6 +22,9 @@ class MirrorOperator(object):
         """
         :param env_vars: dictionary includes namespace,
             hostess_docker_registry (used in RegistryMirror),
+            ss_ds_labels (used in RegistryMirror, optional),
+            ss_ds_template_lables (used in RegistryMirror, optional)
+            ss_ds_tolerations (used in RegistryMirror, optional)
             hostess_docker_image (used in RegistryMirror),
             hostess_docker_tag (used in RegistryMirror),
             image_pull_secrets(used in RegistryMirror, optional),
@@ -46,10 +50,15 @@ class MirrorOperator(object):
             status = HTTPStatus(e.status)
             if status == HTTPStatus.NOT_FOUND:
                 raise NoCRDException("CRD not found. Please ensure you create a CRD with group - %s,"
-                             "version - %s and plural - %s before this operator can run.",
-                             CRD_GROUP, CRD_VERSION, CRD_PLURAL)
+                                     "version - %s and plural - %s before this operator can run.",
+                                     CRD_GROUP, CRD_VERSION, CRD_PLURAL)
             else:
                 LOGGER.exception("Error watching custom object events", exc_info=True)
+
+
+def safely_eval_env(env_var):
+    return ast.literal_eval(os.environ.get(env_var)) if os.environ.get(env_var) is not None else None
+
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
@@ -62,6 +71,16 @@ if __name__ == '__main__':
         hostess_docker_image=os.environ.get("HOSTESS_DOCKER_IMAGE",
                                             "ocadotechnology/mirror-hostess"),
         hostess_docker_tag=os.environ.get("HOSTESS_DOCKER_TAG", "1.1.0"),
+        # optional labels to be added to daemonsets and statefulsets
+<<<<<<< HEAD
+        ss_ds_labels=safely_eval_env("SS_DS_LABELS"),
+        ss_ds_template_labels=safely_eval_env("SS_DS_TEMPLATE_LABELS"),
+        # optional tolerations to be added to daemonsets and statefulsets
+        ss_ds_tolerations=safely_eval_env("SS_DS_TOLERATIONS"),
+=======
+        ss_ds_labels=ast.literal_eval(os.environ.get("SS_DS_LABELS")),
+        ss_ds_template_labels=ast.literal_eval(os.environ.get("SS_DS_TEMPLATE_LABELS")),
+>>>>>>> e704903... feat: add optional labels for StatefulSets and DaemonSets
         # optional in V1PodSpec secrets split with comma
         image_pull_secrets=os.environ.get("IMAGE_PULL_SECRETS"),
         # get the docker certificate:

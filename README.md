@@ -1,20 +1,23 @@
 [![Build Status](https://travis-ci.org/ocadotechnology/mirror-operator.svg?branch=master)](https://travis-ci.org/ocadotechnology/mirror-operator)
 
 # mirror-operator
-A python module + resulting docker image which listens for registry mirror requests and creates resources for that mirror. 
+A python module + resulting docker image which listens for registry mirror requests and creates resources for that mirror.
 If you're confused what an operator is, [this blog post][operators] will give you a short introduction, but please note it's a little old.
 
 ## Configuration
 The following environment variables can be set:
 
-Name | description | default 
---- | --- | --- 
+Name | description | default
+--- | --- | ---
 DOCKER_CERTIFICATE_SECRET | You **must** provide a certificate to enable TLS between the docker daemon and the registry and create a secret from it, this variable is the name of the secret | None
-NAMESPACE | The namespace in which the resources should be created. This should be the same namespace as where the container is running | default 
+NAMESPACE | The namespace in which the resources should be created. This should be the same namespace as where the container is running | default
 SECONDS_BETWEEN_STREAMS | Time to sleep between calls to the API. The operator will occasionally lose connection or else fail to run if the Custom Resource Definition does not exist. | 30
-HOSTESS_DOCKER_REGISTRY | The docker registry where mirror-hostess is to be pulled from. | docker.io 
+HOSTESS_DOCKER_REGISTRY | The docker registry where mirror-hostess is to be pulled from. | docker.io
 HOSTESS_DOCKER_IMAGE | The name of the docker image for mirror-hostess. | ocadotechnology/mirror-hostess
 HOSTESS_DOCKER_TAG | The tag for the mirror-hostess docker image. | 1.1.0
+SS_DS_LABELS | (Optional) StatefulSet and DaemonSet labels | None
+SS_DS_TEMPLATE_LABELS | (Optional) StatefulSet and DaemonSet pod labels | None
+SS_DS_TOLERATIONS | (Optional) StatefulSet and DaemonSet pod tolerations | None
 IMAGE_PULL_SECRETS | (Optional) Secret to pull images from the upstream registry | None
 CA_CERTIFICATE_BUNDLE | (Optional) Certificate bundle for the registry host  | None
 
@@ -95,10 +98,10 @@ spec:
           storage: 20Gi
 ```
 
-The operator will then deploy a daemonset, statefulset, service and headless service in whichever namespace is configured. We generally expect this to be default. These will all be named `registry-mirror-<name>`, with the exception of the headless service which will be named `registry-mirror-<name>-headless`.
+The operator will then deploy a daemonset, statefulset, service and headless service in whichever namespace is configured. We generally expect this to be default. These will all be named `registry-mirror-<name>`, with the exception of the headless service which will be named `registry-mirror-<name>-headless` and the statefulset and daemonset which will both be named `registry-mirror-<name>-utils`.
 You can get all the elements of your mirror using - `kubectl get ds,statefulset,svc,registrymirror -l mirror=<name> -n default`.
 
-If you wish to update the secret or URL, all you need to do is change it in the `RegistryMirror` manifest and the operator will handle updates. 
+If you wish to update the secret or URL, all you need to do is change it in the `RegistryMirror` manifest and the operator will handle updates.
 
 [operators]: https://coreos.com/blog/introducing-operators.html
 [mirror-hostess]: https://github.com/ocadotechnology/mirror-hostess

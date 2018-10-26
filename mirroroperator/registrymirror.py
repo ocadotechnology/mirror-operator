@@ -35,11 +35,15 @@ class RegistryMirror(object):
         self.nginx_config_secret_name = self.full_name + "-secret"
         self.apiVersion = kwargs.get("apiVersion")
         self.upstreamUrl = kwargs.get("spec", {}).get("upstreamUrl")
+
         self.masqueradeUrl = kwargs.get("spec", {}).get("masqueradeUrl", "mirror-"+self.upstreamUrl)
+
         self.credentials_secret_name = kwargs.get(
             "spec", {}).get("credentialsSecret")
+
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
+
         self.volume_claim_spec = kwargs.get(
             "spec",
             {},
@@ -266,36 +270,35 @@ class RegistryMirror(object):
                         service_account_name="mirror-hostess",
                         termination_grace_period_seconds=2,
                         volumes=[client.V1Volume(
-                            name="etc-hosts",
-                            host_path=client.V1HostPathVolumeSource(
-                                path="/etc/hosts"
-                            )
-                        ),
-                            client.V1Volume(
-                                name="etc-hosts-backup",
-                                host_path=client.V1HostPathVolumeSource(
-                                    path="/etc/hosts.backup"
-                                )
-                            ),
-                            client.V1Volume(
-                                name="lock",
-                                host_path=client.V1HostPathVolumeSource(
-                                    path="/var/lock/mirror-hostess"
-                                ),
-                            ),
-                            client.V1Volume(
-                                name="docker-certs",
-                                host_path=client.V1HostPathVolumeSource(
-                                    path="/etc/docker/certs.d/{}".format(self.masqueradeUrl)
-                                ),
-                            ),
-                            client.V1Volume(
-                                name="tls",
-                                secret=client.V1SecretVolumeSource(
-                                    secret_name=self.docker_certificate_secret
-                                )
-                            )
-                        ]
+                                   name="etc-hosts",
+                                   host_path=client.V1HostPathVolumeSource(
+                                       path="/etc/hosts"
+                                   )
+                                 ),
+                                 client.V1Volume(
+                                     name="etc-hosts-backup",
+                                     host_path=client.V1HostPathVolumeSource(
+                                         path="/etc/hosts.backup"
+                                     )
+                                 ),
+                                 client.V1Volume(
+                                     name="lock",
+                                     host_path=client.V1HostPathVolumeSource(
+                                         path="/var/lock/mirror-hostess"
+                                     ),
+                                 ),
+                                 client.V1Volume(
+                                     name="docker-certs",
+                                     host_path=client.V1HostPathVolumeSource(
+                                         path="/etc/docker/certs.d/{}".format(self.masqueradeUrl)
+                                     ),
+                                 ),
+                                 client.V1Volume(
+                                     name="tls",
+                                     secret=client.V1SecretVolumeSource(
+                                         secret_name=self.docker_certificate_secret
+                                     )
+                                 )]
                     )
                 ),
                 update_strategy=client.V1beta1DaemonSetUpdateStrategy(

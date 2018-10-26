@@ -27,16 +27,16 @@ class RegistryMirror(object):
         self.hostess_docker_image = hostess_docker_image
         self.hostess_docker_tag = hostess_docker_tag
         self.docker_certificate_secret = docker_certificate_secret
-        self.kind = kwargs.get("kind")
-        self.name = kwargs.get("metadata", {}).get("name")
-        self.uid = kwargs.get("metadata", {}).get("uid")
-        self.full_name = "registry-mirror-{}".format(self.name)
+        kind = kwargs.get("kind")
+        name = kwargs.get("metadata", {}).get("name")
+        uid = kwargs.get("metadata", {}).get("uid")
+        self.full_name = "registry-mirror-{}".format(name)
         self.daemon_set_name = self.full_name + "-utils"
         self.nginx_config_secret_name = self.full_name + "-secret"
         self.apiVersion = kwargs.get("apiVersion")
-        self.upstreamUrl = kwargs.get("spec", {}).get("upstreamUrl")
+        upstream_url = kwargs.get("spec", {}).get("upstreamUrl")
 
-        self.masqueradeUrl = kwargs.get("spec", {}).get("masqueradeUrl", "mirror-"+self.upstreamUrl)
+        self.masquerade_url = kwargs.get("spec", {}).get("masqueradeUrl", "mirror-"+upstream_url)
 
         self.credentials_secret_name = kwargs.get(
             "spec", {}).get("credentialsSecret")
@@ -86,13 +86,13 @@ class RegistryMirror(object):
                 proxy_set_header              X-Forwarded-For $proxy_add_x_forwarded_for;
             }}}}
         }}}}'''.format(registry_cert_dir=REGISTRY_CERT_DIR, cache_dir=CACHE_DIR,
-                       upstream_fqdn=self.upstreamUrl, zone="the_zone",
+                       upstream_fqdn=upstream_url, zone="the_zone",
                        healthcheck_path=HEALTH_CHECK_PATH,
                        shared_cert_mount_path=SHARED_CERT_MOUNT_PATH, cert_file=CERT_FILE)
 
         self.labels = {
             "app": "docker-registry",
-            "mirror": self.name,
+            "mirror": name,
         }
 
         self.metadata = client.V1ObjectMeta(
@@ -102,9 +102,9 @@ class RegistryMirror(object):
             owner_references=[
                 client.V1OwnerReference(
                     api_version=self.apiVersion,
-                    name=self.name,
-                    kind=self.kind,
-                    uid=self.uid,
+                    name=name,
+                    kind=kind,
+                    uid=uid,
                 )
             ]
         )
@@ -204,7 +204,7 @@ class RegistryMirror(object):
                                         value=self.namespace),
                                     client.V1EnvVar(
                                         name="SHADOW_FQDN",
-                                        value=self.masqueradeUrl),
+                                        value=self.masquerade_url),
                                     client.V1EnvVar(
                                         name="HOSTS_FILE",
                                         value="/etc/hosts_from_host"),
@@ -290,7 +290,7 @@ class RegistryMirror(object):
                                  client.V1Volume(
                                      name="docker-certs",
                                      host_path=client.V1HostPathVolumeSource(
-                                         path="/etc/docker/certs.d/{}".format(self.masqueradeUrl)
+                                         path="/etc/docker/certs.d/{}".format(self.masquerade_url)
                                      ),
                                  ),
                                  client.V1Volume(
@@ -306,10 +306,6 @@ class RegistryMirror(object):
                 )
             )
         return daemon_set
-
-    def generate_service(self, service):
-        service.spec.type = "NodePort"
-        return service
 
     def generate_headless_service(self, service_headless):
         service_headless.spec.cluster_ip = 'None'
@@ -521,9 +517,8 @@ class RegistryMirror(object):
             )
         )
         if not service:
-            service = self.generate_service(empty_service)
             self.run_action_and_parse_error(self.core_api.create_namespaced_service,
-                                            self.namespace, service)
+                                            self.namespace, empty_service)
             LOGGER.info("Service created")
 
         else:

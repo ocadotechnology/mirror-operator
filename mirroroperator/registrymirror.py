@@ -411,11 +411,11 @@ class RegistryMirror(object):
         volumes_to_mount = [
             client.V1VolumeMount(
                 name="image-store",
-                mount_path"/var/lib/registry"
+                mount_path=CACHE_DIR
             ),
             client.V1VolumeMount(
                 name="tls",
-                mount_path="/etc/registry-certs",
+                mount_path=REGISTRY_CERT_DIR,
                 read_only=True
             ),
             client.V1VolumeMount(

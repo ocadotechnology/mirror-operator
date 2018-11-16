@@ -6,6 +6,13 @@ import base64
 import json
 from http import HTTPStatus
 
+REGISTRY_CERT_DIR = '/etc/registry-certs'
+UPSTREAM_CERT_DIR = '/etc/upstream-certs'
+CACHE_DIR = "/var/lib/registry"
+HEALTH_CHECK_PATH = "/health-check"
+SHARED_CERT_NAME = "shared-certs"
+SHARED_CERT_MOUNT_PATH = "/etc/shared-certs"
+CERT_FILE = "ca-certificates.crt"
 
 LOGGER = logging.getLogger(__name__)
 
@@ -20,18 +27,23 @@ class RegistryMirror(object):
         self.hostess_docker_image = hostess_docker_image
         self.hostess_docker_tag = hostess_docker_tag
         self.docker_certificate_secret = docker_certificate_secret
-        self.kind = kwargs.get("kind")
-        self.name = kwargs.get("metadata", {}).get("name")
-        self.uid = kwargs.get("metadata", {}).get("uid")
-        self.full_name = "registry-mirror-{}".format(self.name)
+        kind = kwargs.get("kind")
+        name = kwargs.get("metadata", {}).get("name")
+        uid = kwargs.get("metadata", {}).get("uid")
+        self.full_name = "registry-mirror-{}".format(name)
         self.daemon_set_name = self.full_name + "-utils"
+        self.nginx_config_secret_name = self.full_name + "-secret"
         self.apiVersion = kwargs.get("apiVersion")
-        self.upstreamUrl = kwargs.get("spec", {}).get("upstreamUrl")
-        self.masqueradeUrl = kwargs.get("spec", {}).get("masqueradeUrl", "mirror-"+self.upstreamUrl)
+        upstream_url = kwargs.get("spec", {}).get("upstreamUrl")
+
+        self.masquerade_url = kwargs.get("spec", {}).get("masqueradeUrl", "mirror-"+upstream_url)
+
         self.credentials_secret_name = kwargs.get(
             "spec", {}).get("credentialsSecret")
+
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
+
         self.volume_claim_spec = kwargs.get(
             "spec",
             {},
@@ -43,9 +55,44 @@ class RegistryMirror(object):
             {},
         )
 
+        self.nginx_config_template = '''
+        proxy_cache_path {cache_dir} levels=1:2 inactive=7d use_temp_path=off keys_zone={zone}:10m;
+        server {{{{
+
+            listen                5000 ssl;
+            server_name           localhost;
+            ssl_certificate       {registry_cert_dir}/tls.crt;
+            ssl_certificate_key   {registry_cert_dir}/tls.key;
+
+            location {healthcheck_path} {{{{
+                return 200 '';
+            }}}}
+
+            location / {{{{
+                proxy_ssl_trusted_certificate {shared_cert_mount_path}/{cert_file};
+                limit_except HEAD GET OPTIONS {{{{
+                    deny all;
+                }}}}
+
+                proxy_pass                    https://{upstream_fqdn};
+                proxy_ssl_verify              on;
+                proxy_ssl_verify_depth        9;
+                proxy_ssl_session_reuse       on;
+                {{auth}}
+                proxy_cache                   {zone};
+                proxy_cache_valid             7d;
+                proxy_set_header              Host {upstream_fqdn};
+                proxy_set_header              X-Real-IP $remote_addr;
+                proxy_set_header              X-Forwarded-For $proxy_add_x_forwarded_for;
+            }}}}
+        }}}}'''.format(registry_cert_dir=REGISTRY_CERT_DIR, cache_dir=CACHE_DIR,
+                       upstream_fqdn=upstream_url, zone="the_zone",
+                       healthcheck_path=HEALTH_CHECK_PATH,
+                       shared_cert_mount_path=SHARED_CERT_MOUNT_PATH, cert_file=CERT_FILE)
+
         self.labels = {
             "app": "docker-registry",
-            "mirror": self.name,
+            "mirror": name,
         }
 
         self.metadata = client.V1ObjectMeta(
@@ -55,9 +102,9 @@ class RegistryMirror(object):
             owner_references=[
                 client.V1OwnerReference(
                     api_version=self.apiVersion,
-                    name=self.name,
-                    kind=self.kind,
-                    uid=self.uid,
+                    name=name,
+                    kind=kind,
+                    uid=uid,
                 )
             ]
         )
@@ -91,9 +138,16 @@ class RegistryMirror(object):
                 self.namespace
             )
 
+            secret = self.run_action_and_parse_error(
+                self.core_api.read_namespaced_secret,
+                self.nginx_config_secret_name,
+                self.namespace
+            )
+
             self.update_services(service, service_headless)
             self.update_stateful_set(stateful_set)
             self.update_daemon_set(daemon_set)
+            self.update_secret(secret)
 
     def run_action_and_parse_error(self, func, *args, **kwargs):
         """ Helper method to avoid try/excepts all over the place + does
@@ -150,7 +204,7 @@ class RegistryMirror(object):
                                         value=self.namespace),
                                     client.V1EnvVar(
                                         name="SHADOW_FQDN",
-                                        value=self.masqueradeUrl),
+                                        value=self.masquerade_url),
                                     client.V1EnvVar(
                                         name="HOSTS_FILE",
                                         value="/etc/hosts_from_host"),
@@ -196,7 +250,7 @@ class RegistryMirror(object):
                                     "-u",
                                     "-x"
                                 ],
-                                image="alpine:3.5",
+                                image="alpine:3.6",
                                 image_pull_policy="Always",
                                 resources=client.V1ResourceRequirements(
                                     requests={"memory": "1Mi", "cpu": "0.001"},
@@ -216,36 +270,35 @@ class RegistryMirror(object):
                         service_account_name="mirror-hostess",
                         termination_grace_period_seconds=2,
                         volumes=[client.V1Volume(
-                            name="etc-hosts",
-                            host_path=client.V1HostPathVolumeSource(
-                                path="/etc/hosts"
-                            )
-                        ),
-                            client.V1Volume(
-                                name="etc-hosts-backup",
-                                host_path=client.V1HostPathVolumeSource(
-                                    path="/etc/hosts.backup"
-                                )
-                            ),
-                            client.V1Volume(
-                                name="lock",
-                                host_path=client.V1HostPathVolumeSource(
-                                    path="/var/lock/mirror-hostess"
-                                ),
-                            ),
-                            client.V1Volume(
-                                name="docker-certs",
-                                host_path=client.V1HostPathVolumeSource(
-                                    path="/etc/docker/certs.d/{}".format(self.masqueradeUrl)
-                                ),
-                            ),
-                            client.V1Volume(
-                                name="tls",
-                                secret=client.V1SecretVolumeSource(
-                                    secret_name=self.docker_certificate_secret
-                                )
-                            )
-                        ]
+                                   name="etc-hosts",
+                                   host_path=client.V1HostPathVolumeSource(
+                                       path="/etc/hosts"
+                                   )
+                                 ),
+                                 client.V1Volume(
+                                     name="etc-hosts-backup",
+                                     host_path=client.V1HostPathVolumeSource(
+                                         path="/etc/hosts.backup"
+                                     )
+                                 ),
+                                 client.V1Volume(
+                                     name="lock",
+                                     host_path=client.V1HostPathVolumeSource(
+                                         path="/var/lock/mirror-hostess"
+                                     ),
+                                 ),
+                                 client.V1Volume(
+                                     name="docker-certs",
+                                     host_path=client.V1HostPathVolumeSource(
+                                         path="/etc/docker/certs.d/{}".format(self.masquerade_url)
+                                     ),
+                                 ),
+                                 client.V1Volume(
+                                     name="tls",
+                                     secret=client.V1SecretVolumeSource(
+                                         secret_name=self.docker_certificate_secret
+                                     )
+                                 )]
                     )
                 ),
                 update_strategy=client.V1beta1DaemonSetUpdateStrategy(
@@ -254,25 +307,21 @@ class RegistryMirror(object):
             )
         return daemon_set
 
-    def generate_service(self, service):
-        service.spec.type = "ClusterIP"
-        return service
-
     def generate_headless_service(self, service_headless):
         service_headless.spec.cluster_ip = 'None'
         service_headless.spec.type = "ClusterIP"
         return service_headless
 
-    def handle_proxy_credentials(self, env):
+    def get_upstream_credentials(self):
         credentials_secret = None
         if self.credentials_secret_name:
             credentials_secret = self.run_action_and_parse_error(self.core_api.read_namespaced_secret,
-                                                             self.credentials_secret_name,
-                                                             self.namespace)
+                                                                 self.credentials_secret_name,
+                                                                 self.namespace)
         if not credentials_secret:
             LOGGER.error("No secret named %s was found in the %s namespace, will use unauth access",
                          self.credentials_secret_name, self.namespace)
-            return env
+            return None
 
         encoded_user = credentials_secret.data.get("username")
         encoded_pass = credentials_secret.data.get("password")
@@ -280,38 +329,30 @@ class RegistryMirror(object):
         if not (encoded_user and encoded_pass):
             LOGGER.error("Secret %s does not contain username/password",
                          self.credentials_secret_name)
-            return env
-        env.append(client.V1EnvVar(name="REGISTRY_PROXY_USERNAME",
-                                   value=None,
-                                   value_from=client.V1EnvVarSource(
-                                        secret_key_ref=client.V1SecretKeySelector(
-                                            key="username",
-                                            name=self.credentials_secret_name
-                                        )
-                                   ))
-                  )
-        env.append(client.V1EnvVar(name="REGISTRY_PROXY_PASSWORD",
-                                   value=None,
-                                   value_from=client.V1EnvVarSource(
-                                        secret_key_ref=client.V1SecretKeySelector(
-                                            key="password",
-                                            name=self.credentials_secret_name
-                                        )
-                                   ))
-                  )
-        LOGGER.info("Secret selected + env vars set successfully")
-        return env
-
+            return None
+        the_user = base64.b64decode(encoded_user.encode()).decode()
+        the_pass = base64.b64decode(encoded_pass.encode()).decode()
+        LOGGER.info("Secret selected successfully")
+        return (the_user, the_pass)
 
     def generate_stateful_set(self):
-
+        script = '''
+        TEMPFILE=$(mktemp)
+        cat /etc/ssl/certs/{cert_file} >> $TEMPFILE
+        if [ -d {upstream_cert_dir} ]; then
+          cat {upstream_cert_dir}/{cert_file} >> $TEMPFILE
+        fi
+        mv $TEMPFILE {shared_cert_mount_path}/{cert_file}
+        '''.format(upstream_cert_dir=UPSTREAM_CERT_DIR, cert_file=CERT_FILE,
+                   shared_cert_mount_path=SHARED_CERT_MOUNT_PATH)
         volume_claim_spec = client.V1PersistentVolumeClaimSpec(**self.volume_claim_spec)
         if not volume_claim_spec.access_modes:
             volume_claim_spec.access_modes = ["ReadWriteOnce"]
+
         if not volume_claim_spec.resources:
             volume_claim_spec.resources = client.V1ResourceRequirements(
                 requests={"storage": "20Gi"}
-            )
+            ).to_dict()
 
         stateful_set = client.V1beta1StatefulSet(
             metadata=self.metadata,
@@ -342,6 +383,7 @@ class RegistryMirror(object):
                     )
                 )
             ]
+
         volumes.append(
             client.V1Volume(
                 name="tls",
@@ -350,47 +392,65 @@ class RegistryMirror(object):
                 ),
             )
         )
+        volumes.append(
+            client.V1Volume(
+                name="nginx-config",
+                secret=client.V1SecretVolumeSource(
+                    secret_name=self.nginx_config_secret_name
+                ),
+            )
+        )
+        volumes.append(
+            client.V1Volume(
+                name=SHARED_CERT_NAME,
+                empty_dir=client.V1EmptyDirVolumeSource()
+            )
+        )
 
         volumes_to_mount = [
             client.V1VolumeMount(
                 name="image-store",
-                mount_path="/var/lib/registry"
+                mount_path=CACHE_DIR
             ),
             client.V1VolumeMount(
                 name="tls",
-                mount_path="/etc/registry-certs",
+                mount_path=REGISTRY_CERT_DIR,
+                read_only=True
+            ),
+            client.V1VolumeMount(
+                name=SHARED_CERT_NAME,
+                mount_path=SHARED_CERT_MOUNT_PATH,
+                read_only=True,
+            ),
+            client.V1VolumeMount(
+                name="nginx-config",
+                mount_path="/etc/nginx/conf.d",
                 read_only=True
             )
         ]
+
+        generate_ca_certs_volume_mounts = [
+            client.V1VolumeMount(
+                name=SHARED_CERT_NAME,
+                mount_path=SHARED_CERT_MOUNT_PATH,
+                read_only=False
+            )
+        ]
         if self.ca_certificate_bundle:
-            volumes_to_mount.append(
+            generate_ca_certs_volume_mounts.append(
                 client.V1VolumeMount(
                     name=self.ca_certificate_bundle,
-                    mount_path="/etc/ssl/certs",
+                    mount_path=UPSTREAM_CERT_DIR,
                     read_only=True
                 )
             )
 
-        env = [client.V1EnvVar(name="REGISTRY_PROXY_REMOTEURL",
-                               value="https://" + self.upstreamUrl),
-               client.V1EnvVar(name="REGISTRY_HTTP_ADDR",
-                               value=":5000"),
-               client.V1EnvVar(name="REGISTRY_HTTP_DEBUG_ADDR",
-                               value="localhost:6000"),
-               client.V1EnvVar(name="REGISTRY_HTTP_TLS_CERTIFICATE",
-                               value="/etc/registry-certs/tls.crt"),
-               client.V1EnvVar(name="REGISTRY_HTTP_TLS_KEY",
-                               value="/etc/registry-certs/tls.key"),
-               client.V1EnvVar(name="REGISTRY_LOG_ACCESSLOG_DISABLED",
-                               value="true"),
-               client.V1EnvVar(name="REGISTRY_LOG_FORMATTER",
-                               value="logstash"),
-               client.V1EnvVar(name="REGISTRY_STORAGE_DELETE_ENABLED",
-                               value="true"),
-               client.V1EnvVar(name="REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY",
-                               value="/var/lib/registry")
-               ]
-        env = self.handle_proxy_credentials(env)
+        resources=client.V1ResourceRequirements(
+            requests={"cpu": "0.1",
+                      "memory": "500Mi"},
+            limits={"cpu": "0.5",
+                    "memory": "500Mi"}
+        )
 
         stateful_set.spec.template = client.V1PodTemplateSpec(
                     metadata=client.V1ObjectMeta(
@@ -399,40 +459,21 @@ class RegistryMirror(object):
                     spec=client.V1PodSpec(
                         init_containers=[
                             client.V1Container(
-                                name="validate-state-file",
-                                image="python:3.6-alpine",
-                                env=[
-                                    client.V1EnvVar(
-                                        name="STATE_FILE",
-                                        value="/var/lib/registry/scheduler-state.json"
-                                    ),
-                                    client.V1EnvVar(
-                                        name="LOWER_LIMIT",
-                                        value="1024"
-                                    ),
-                                ],
-                                volume_mounts=[
-                                    client.V1VolumeMount(
-                                        name="image-store",
-                                        mount_path="/var/lib/registry"
-                                    )
-                                ],
-                                command=[
-                                    "sh",
-                                    "-e",
-                                    "-c",
-                                    "touch $STATE_FILE; if [[ $(stat -c \"%s\" $STATE_FILE) -lt $LOWER_LIMIT ]]; then rm -f $STATE_FILE; else cat $STATE_FILE | python -m json.tool > /dev/null 2>&1 || rm -f $STATE_FILE; fi"  # noqa
-                                ]
+                                name="generate-ca-certs",
+                                image="cloudbees/docker-certificates:1.2",
+                                command=["/bin/sh"],
+                                args=["-c", script],
+                                volume_mounts=generate_ca_certs_volume_mounts,
+                                resources=resources,
                             )
                         ],
                         containers=[
                             client.V1Container(
                                 name="registry",
-                                image="registry:2.6.0",
-                                env=env,
+                                image="nginx:1.13.3-alpine",
                                 readiness_probe=client.V1Probe(
                                     http_get=client.V1HTTPGetAction(
-                                        path="/",
+                                        path=HEALTH_CHECK_PATH,
                                         port=5000,
                                         scheme="HTTPS"
                                     ),
@@ -443,14 +484,9 @@ class RegistryMirror(object):
                                     container_port=5000,
                                     name="https"
                                 )],
-                                resources=client.V1ResourceRequirements(
-                                    requests={"cpu": "0.1",
-                                              "memory": "500Mi"},
-                                    limits={"cpu": "0.5",
-                                            "memory": "500Mi"}
-                                ),
+                                resources=resources,
                                 volume_mounts=volumes_to_mount,
-                            )
+                            ),
                         ],
                         termination_grace_period_seconds=10,
                         volumes=volumes,
@@ -458,6 +494,19 @@ class RegistryMirror(object):
                 )
         stateful_set.spec.update_strategy = client.V1beta1StatefulSetUpdateStrategy(type="RollingUpdate",)
         return stateful_set
+
+    def generate_secret(self, secret):
+        secret.metadata = copy.deepcopy(self.metadata)
+        secret.metadata.name = self.nginx_config_secret_name
+        upstream_credentials = self.get_upstream_credentials()
+        auth = ''
+        if upstream_credentials:
+            basic_auth = ':'.join(upstream_credentials)
+            basic_auth = base64.b64encode(basic_auth.encode()).decode()
+            auth = 'proxy_set_header Authorization "Basic {auth}";'.format(auth=basic_auth)
+        nginx_config = self.nginx_config_template.format(auth=auth)
+        secret.data = {"default.conf": base64.b64encode(nginx_config.encode()).decode()}
+        return secret
 
     def update_services(self, service, service_headless):
         empty_service = client.V1Service(
@@ -468,13 +517,11 @@ class RegistryMirror(object):
             )
         )
         if not service:
-            service = self.generate_service(empty_service)
             self.run_action_and_parse_error(self.core_api.create_namespaced_service,
-                                            self.namespace, service)
+                                            self.namespace, empty_service)
             LOGGER.info("Service created")
 
         else:
-            service = self.generate_service(service)
             self.run_action_and_parse_error(
                 self.core_api.replace_namespaced_service,
                 service.metadata.name, self.namespace, service
@@ -511,6 +558,21 @@ class RegistryMirror(object):
                 self.apps_api.replace_namespaced_stateful_set,
                 stateful_set.metadata.name, self.namespace, stateful_set)
             LOGGER.info("Stateful set replaced")
+
+    def update_secret(self, secret):
+        empty_secret = client.V1Secret()
+        if not secret:
+            secret = self.generate_secret(empty_secret)
+            self.run_action_and_parse_error(self.core_api.create_namespaced_secret,
+                                            self.namespace,
+                                            secret)
+            LOGGER.info("Secret created")
+        else:
+            secret = self.generate_secret(secret)
+            self.run_action_and_parse_error(self.core_api.replace_namespaced_secret,
+                                            secret.metadata.name,
+                                            self.namespace,
+                                            secret)
 
     def update_daemon_set(self, daemon_set):
         empty_daemon_set = client.V1beta1DaemonSet()

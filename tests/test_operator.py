@@ -8,9 +8,11 @@ from urllib3_mock import Responses
 from kubernetes.client.rest import ApiException
 
 TEST_DATA = [{"type": "CREATED", "object": {"metadata": {"name": "hub"},
-                                      "spec": {"upstreamUrl": "hubtest"}}},
+                                      "spec": {"upstreamUrl": "hubtest",
+                                                "credentialsSecret": "internal-mirror"}}},
              {"type": "MODIFIED", "object": {"metadata": {"name": "hub"},
-                                      "spec": {"upstreamUrl": "hubtest"}}}]
+                                      "spec": {"upstreamUrl": "hubtest",
+                                               "credentialsSecret": "internal-mirror"}}}]
 
 
 
@@ -30,8 +32,8 @@ class OperatorTestCase(KubernetesTestCase):
             "hostess_docker_image": "ocadotechnology/mirror-hostess",
             "hostess_docker_tag": None,
             "image_pull_secrets": None,
-            "docker_certificate_secret": VALID_SECRET,
-            "ca_certificate_bundle": None,
+            "docker_certificate_secret": 'aaa',
+            "ca_certificate_bundle": 'bbb',
         }
         self.operator = MirrorOperator(env_var_dict)
 
@@ -45,17 +47,22 @@ class OperatorTestCase(KubernetesTestCase):
                       EMPTY_DAEMON_SET)
         responses.add('GET', '/apis/apps/v1beta1/namespaces/default/statefulsets/registry-mirror-hub',
                       EMPTY_STATEFUL_SET)
+        responses.add('GET', '/api/v1/namespaces/default/secrets/registry-mirror-hub-secret',
+                      '{}')
+        responses.add('GET', '/api/v1/namespaces/default/secrets/internal-mirror',
+                      VALID_SECRET)
         responses.add('PUT', '/api/v1/namespaces/default/services/registry-mirror-hub', '')
         responses.add('PUT', '/api/v1/namespaces/default/services/registry-mirror-hub', '')
         responses.add('PUT', '/apis/extensions/v1beta1/namespaces/default/daemonsets/registry-mirror-hub-utils', '')
         responses.add('PUT', '/apis/apps/v1beta1/namespaces/default/statefulsets/registry-mirror-hub', '')
+        responses.add('PUT', '/api/v1/namespaces/default/secrets/registry-mirror-hub-secret', '')
         with patch('kubernetes.watch.watch.Watch.stream', return_value=stream_generator):
             self.operator.watch_registry_mirrors()
             # all the objects exist, so only 4 gets followed by 4 updates
-        methods = ('GET', 'GET', 'GET', 'GET',
-                   'PUT', 'PUT', 'PUT', 'PUT',
-                   'GET', 'GET', 'GET', 'GET',
-                   'PUT', 'PUT', 'PUT', 'PUT')
+        methods = ('GET', 'GET', 'GET', 'GET', 'GET',
+                   'PUT', 'PUT', 'PUT', 'PUT', 'GET', 'PUT',
+                   'GET', 'GET', 'GET', 'GET', 'GET',
+                   'PUT', 'PUT', 'PUT', 'PUT', 'GET', 'PUT')
         self.check_calls(methods,
                          responses.calls,
                          kubernetes.client.V1ObjectMeta(
@@ -81,22 +88,27 @@ class OperatorTestCase(KubernetesTestCase):
                       status=404)
         responses.add('GET', '/apis/extensions/v1beta1/namespaces/default/daemonsets/registry-mirror-hub-utils',
                       status=404)
+        responses.add('GET', '/api/v1/namespaces/default/secrets/registry-mirror-hub-secret',
+                      status=404)
+        responses.add('GET', '/api/v1/namespaces/default/secrets/internal-mirror',
+                      VALID_SECRET)
         responses.add('POST', '/api/v1/namespaces/default/services', EMPTY_SERVICE)
         responses.add('POST', '/api/v1/namespaces/default/services', EMPTY_SERVICE)
         responses.add('POST', '/apis/apps/v1beta1/namespaces/default/statefulsets',
                       EMPTY_STATEFUL_SET)
         responses.add('POST', '/apis/extensions/v1beta1/namespaces/default/daemonsets',
                       EMPTY_DAEMON_SET)
+        responses.add('POST', '/api/v1/namespaces/default/secrets', '')
         with patch('kubernetes.watch.watch.Watch.stream', return_value=stream_generator):
             self.operator.watch_registry_mirrors()
         # none of the objects exist, so 4 gets, followed by 2 service posts, followed by 2 service puts,
         # followed by post/put/post/put for daemon set/stateful set
-        methods = ('GET', 'GET', 'GET', 'GET',
+        methods = ('GET', 'GET', 'GET', 'GET', 'GET',
                    'POST', 'POST',
+                   'POST', 'POST', 'GET', 'POST',
+                   'GET', 'GET', 'GET', 'GET', 'GET',
                    'POST', 'POST',
-                   'GET', 'GET', 'GET', 'GET',
-                   'POST', 'POST',
-                   'POST', 'POST')
+                   'POST', 'POST', 'GET', 'POST')
         self.check_calls(methods,
                          responses.calls,
                          kubernetes.client.V1ObjectMeta(

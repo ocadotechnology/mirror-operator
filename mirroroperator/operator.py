@@ -46,10 +46,11 @@ class MirrorOperator(object):
             status = HTTPStatus(e.status)
             if status == HTTPStatus.NOT_FOUND:
                 raise NoCRDException("CRD not found. Please ensure you create a CRD with group - %s,"
-                             "version - %s and plural - %s before this operator can run.",
-                             CRD_GROUP, CRD_VERSION, CRD_PLURAL)
+                                     "version - %s and plural - %s before this operator can run.",
+                                     CRD_GROUP, CRD_VERSION, CRD_PLURAL)
             else:
                 LOGGER.exception("Error watching custom object events", exc_info=True)
+
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)

@@ -56,6 +56,24 @@ class RegistryMirror(object):
         )
 
         self.nginx_config_template = '''
+        log_format json_combined escape=json
+          '{{{{'
+              '"http": {{{{'
+                  '"request": {{{{'
+                      '"headers": {{{{'
+                          '"host": "$host",'
+                          '"x-forwarded-for": "$proxy_add_x_forwarded_for"'
+                      '}}}},'
+                      '"method": "$request_method",'
+                      '"uri": "$request_uri"'
+                  '}}}},'
+                  '"response": {{{{'
+                      '"status-code": $status'
+                  '}}}}'
+              '}}}},'
+              '"username": "$remote_user"'
+          '}}}}';
+
         proxy_cache_path {cache_dir} levels=1:2 inactive=7d use_temp_path=off keys_zone={zone}:10m;
         server {{{{
 
@@ -63,6 +81,8 @@ class RegistryMirror(object):
             server_name           localhost;
             ssl_certificate       {registry_cert_dir}/tls.crt;
             ssl_certificate_key   {registry_cert_dir}/tls.key;
+
+            access_log /var/log/nginx/access.log json_combined;
 
             location {healthcheck_path} {{{{
                 return 200 '';

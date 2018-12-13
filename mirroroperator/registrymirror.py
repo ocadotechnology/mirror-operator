@@ -1,3 +1,4 @@
+import bitmath
 from kubernetes import client
 from kubernetes.client.rest import ApiException
 import logging
@@ -44,7 +45,7 @@ class RegistryMirror(object):
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
 
-        self.volume_claim_spec = kwargs.get(
+        self.volume_claim_spec = client.V1PersistentVolumeClaimSpec(**kwargs.get(
             "spec",
             {},
         ).get(
@@ -53,7 +54,15 @@ class RegistryMirror(object):
         ).get(
             "spec",
             {},
-        )
+        ))
+        if not self.volume_claim_spec.access_modes:
+            self.volume_claim_spec.access_modes = ["ReadWriteOnce"]
+        if not self.volume_claim_spec.resources:
+            self.volume_claim_spec.resources = client.V1ResourceRequirements(
+                requests={"storage": "20Gi"}
+            ).to_dict()
+
+        cache_size_limit = int(bitmath.parse_string_unsafe(self.volume_claim_spec.resources['requests']['storage']).to_GB() * 0.8)
 
         self.nginx_config_template = '''
         log_format json_combined escape=json
@@ -74,7 +83,7 @@ class RegistryMirror(object):
               '"username": "$remote_user"'
           '}}}}';
 
-        proxy_cache_path {cache_dir} levels=1:2 inactive=7d use_temp_path=off keys_zone={zone}:10m;
+        proxy_cache_path {cache_dir} levels=1:2 inactive=7d use_temp_path=off keys_zone={zone}:10m max_size={cache_size_limit}g;
         server {{{{
 
             listen                5000 ssl;
@@ -106,6 +115,7 @@ class RegistryMirror(object):
                 proxy_set_header              X-Forwarded-For $proxy_add_x_forwarded_for;
             }}}}
         }}}}'''.format(registry_cert_dir=REGISTRY_CERT_DIR, cache_dir=CACHE_DIR,
+                       cache_size_limit=cache_size_limit,
                        upstream_fqdn=upstream_url, zone="the_zone",
                        healthcheck_path=HEALTH_CHECK_PATH,
                        shared_cert_mount_path=SHARED_CERT_MOUNT_PATH, cert_file=CERT_FILE)
@@ -365,14 +375,6 @@ class RegistryMirror(object):
         mv $TEMPFILE {shared_cert_mount_path}/{cert_file}
         '''.format(upstream_cert_dir=UPSTREAM_CERT_DIR, cert_file=CERT_FILE,
                    shared_cert_mount_path=SHARED_CERT_MOUNT_PATH)
-        volume_claim_spec = client.V1PersistentVolumeClaimSpec(**self.volume_claim_spec)
-        if not volume_claim_spec.access_modes:
-            volume_claim_spec.access_modes = ["ReadWriteOnce"]
-
-        if not volume_claim_spec.resources:
-            volume_claim_spec.resources = client.V1ResourceRequirements(
-                requests={"storage": "20Gi"}
-            ).to_dict()
 
         stateful_set = client.V1beta1StatefulSet(
             metadata=self.metadata,
@@ -385,7 +387,7 @@ class RegistryMirror(object):
                     metadata=client.V1ObjectMeta(
                         name="image-store",
                     ),
-                    spec=volume_claim_spec,
+                    spec=self.volume_claim_spec,
                 )]
             )
         )

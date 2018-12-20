@@ -14,7 +14,6 @@ HEALTH_CHECK_PATH = "/health-check"
 SHARED_CERT_NAME = "shared-certs"
 SHARED_CERT_MOUNT_PATH = "/etc/shared-certs"
 CERT_FILE = "ca-certificates.crt"
-
 LOGGER = logging.getLogger(__name__)
 
 
@@ -96,14 +95,17 @@ class RegistryMirror(object):
             location {healthcheck_path} {{{{
                 return 200 '';
             }}}}
-
+            
+            #resolver;
+            set $upstream_endpoint https://{upstream_fqdn};
+                
             location / {{{{
                 proxy_ssl_trusted_certificate {shared_cert_mount_path}/{cert_file};
                 limit_except HEAD GET OPTIONS {{{{
                     deny all;
                 }}}}
-
-                proxy_pass                    https://{upstream_fqdn};
+                
+                proxy_pass                    $upstream_endpoint;
                 proxy_ssl_verify              on;
                 proxy_ssl_verify_depth        9;
                 proxy_ssl_session_reuse       on;
@@ -366,16 +368,6 @@ class RegistryMirror(object):
         return (the_user, the_pass)
 
     def generate_stateful_set(self):
-        script = '''
-        TEMPFILE=$(mktemp)
-        cat /etc/ssl/certs/{cert_file} >> $TEMPFILE
-        if [ -d {upstream_cert_dir} ]; then
-          cat {upstream_cert_dir}/{cert_file} >> $TEMPFILE
-        fi
-        mv $TEMPFILE {shared_cert_mount_path}/{cert_file}
-        '''.format(upstream_cert_dir=UPSTREAM_CERT_DIR, cert_file=CERT_FILE,
-                   shared_cert_mount_path=SHARED_CERT_MOUNT_PATH)
-
         stateful_set = client.V1beta1StatefulSet(
             metadata=self.metadata,
             spec=client.V1beta1StatefulSetSpec(
@@ -428,7 +420,12 @@ class RegistryMirror(object):
                 empty_dir=client.V1EmptyDirVolumeSource()
             )
         )
-
+        volumes.append(
+            client.V1Volume(
+                name='nginx-config-edited',
+                empty_dir=client.V1EmptyDirVolumeSource()
+            )
+        )
         volumes_to_mount = [
             client.V1VolumeMount(
                 name="image-store",
@@ -445,7 +442,7 @@ class RegistryMirror(object):
                 read_only=True,
             ),
             client.V1VolumeMount(
-                name="nginx-config",
+                name="nginx-config-edited",
                 mount_path="/etc/nginx/conf.d",
                 read_only=True
             )
@@ -473,7 +470,22 @@ class RegistryMirror(object):
             limits={"cpu": "0.5",
                     "memory": "500Mi"}
         )
-
+        script = '''
+                TEMPFILE=$(mktemp)
+                cat /etc/ssl/certs/{cert_file} >> $TEMPFILE
+                if [ -d {upstream_cert_dir} ]; then
+                  cat {upstream_cert_dir}/{cert_file} >> $TEMPFILE
+                fi
+                mv $TEMPFILE {shared_cert_mount_path}/{cert_file}
+                '''.format(upstream_cert_dir=UPSTREAM_CERT_DIR, cert_file=CERT_FILE,
+                           shared_cert_mount_path=SHARED_CERT_MOUNT_PATH)
+        script_munge_nameservers = '''
+                cp /etc/nginx/conf.d/default.conf /tmp/nginx/default.conf
+                NAMESERVERS=$(cat /etc/resolv.conf | grep "nameserver" | awk '{{print $2}}' | tr '\n' ' ')
+                if [ ! "$NAMESERVERS" == "" ]; then
+                    sed -E -i "s/(#)(resolver)(;)/\\2 ${NAMESERVERS}\\3/" /tmp/nginx/default.conf
+                fi
+                '''
         stateful_set.spec.template = client.V1PodTemplateSpec(
                     metadata=client.V1ObjectMeta(
                         labels=pod_labels
@@ -486,6 +498,24 @@ class RegistryMirror(object):
                                 command=["/bin/sh"],
                                 args=["-c", script],
                                 volume_mounts=generate_ca_certs_volume_mounts,
+                                resources=resources,
+                            ),
+                            client.V1Container(
+                                name="get-nameservers",
+                                image="busybox",
+                                command=["/bin/sh"],
+                                args=["-c", script_munge_nameservers],
+                                volume_mounts=[
+                                    client.V1VolumeMount(
+                                        name="nginx-config",
+                                        mount_path="/etc/nginx/conf.d"
+                                    ),
+                                    client.V1VolumeMount(
+                                        name="nginx-config-edited",
+                                        mount_path="/tmp/nginx"
+                                    )
+
+                                ],
                                 resources=resources,
                             )
                         ],

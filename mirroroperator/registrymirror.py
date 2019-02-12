@@ -251,7 +251,7 @@ class RegistryMirror(object):
                                 image_pull_policy="Always",
                                 resources=client.V1ResourceRequirements(
                                     requests={
-                                        "memory": "32Mi", "cpu": "0.001"
+                                        "memory": "64Mi", "cpu": "0.001"
                                     },
                                     limits={"memory": "128Mi", "cpu": "0.1"},
                                 ),

@@ -38,7 +38,12 @@ EMPTY_DAEMON_SET = """{
                 "creationTimestamp":"2017-09-12T14:01:29Z",
                 "labels": {
                     "app":"docker-registry",
-                    "mirror":"hub"
+                    "mirror":"hub",
+                    "kube-monkey/enabled":"enabled",
+                    "kube-monkey/identifier":"registry-mirror-hub-utils",
+                    "kube-monkey/mtbf":"3",
+                    "kube-monkey/kill-mode":"fixed",
+                    "kube-monkey/kill-value":"1"
                     },
                 "ownerReferences": [
                     {
@@ -110,7 +115,12 @@ EMPTY_STATEFUL_SET = """{
         "creationTimestamp":"2017-09-12T14:11:48Z",
         "labels": {
             "app":"docker-registry",
-            "mirror":"hub"
+            "mirror":"hub",
+            "kube-monkey/enabled":"enabled",
+            "kube-monkey/identifier":"registry-mirror-hub-utils",
+            "kube-monkey/mtbf":"3",
+            "kube-monkey/kill-mode":"fixed",
+            "kube-monkey/kill-value":"1"
             },
         "ownerReferences": [
             {

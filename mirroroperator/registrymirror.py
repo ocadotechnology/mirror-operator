@@ -212,8 +212,15 @@ class RegistryMirror(object):
     def generate_daemon_set(self, daemon_set):
         ds_pod_labels = copy.deepcopy(self.labels)
         ds_pod_labels["component"] = "hostess-certificate"
+        ds_pod_labels["kube-monkey/enabled"] = "enabled"
+        ds_pod_labels["kube-monkey/identifier"] = self.full_name
         daemon_set.metadata = copy.deepcopy(self.metadata)
         daemon_set.metadata.name = self.daemon_set_name
+        daemon_set.metadata.labels["kube-monkey/enabled"] = "enabled"
+        daemon_set.metadata.labels["kube-monkey/identifier"] = self.full_name
+        daemon_set.metadata.labels["kube-monkey/mtbf"] = "3"
+        daemon_set.metadata.labels["kube-monkey/kill-mode"] = "fixed"
+        daemon_set.metadata.labels["kube-monkey/kill-value"] = "1"
         daemon_set.spec = client.V1beta1DaemonSetSpec(
                 min_ready_seconds=10,
                 template=client.V1PodTemplateSpec(
@@ -384,9 +391,16 @@ class RegistryMirror(object):
             )
         )
 
+        stateful_set.metadata.labels["kube-monkey/enabled"] = "enabled"
+        stateful_set.metadata.labels["kube-monkey/identifier"] = self.full_name
+        stateful_set.metadata.labels["kube-monkey/mtbf"] = "3"
+        stateful_set.metadata.labels["kube-monkey/kill-mode"] = "fixed"
+        stateful_set.metadata.labels["kube-monkey/kill-value"] = "1"
         stateful_set.spec.replicas = 2
         pod_labels = {'component': 'registry'}
         pod_labels.update(self.labels)
+        pod_labels["kube-monkey/enabled"] = "enabled"
+        pod_labels["kube-monkey/identifier"] = self.full_name
         volumes = []
         if self.ca_certificate_bundle:
             volumes = [

@@ -21,7 +21,7 @@ class KubernetesTestCase(TestCase):
             if exp_call != "GET":
                 body = json.loads(request.body)
                 self.assertIn(exp_metadata.name, body['metadata']['name'])
-                self.assertEqual(body['metadata']['labels'], exp_metadata.labels)
+                self.assertDictContainsSubset(exp_metadata.labels, body['metadata']['labels'])
                 self.assertEqual(body['metadata']['ownerReferences'][0]['name'], exp_metadata.owner_references[0].name)
 
     def tearDown(self):

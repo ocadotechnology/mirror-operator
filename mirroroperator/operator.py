@@ -1,3 +1,4 @@
+import ast
 import kubernetes
 import logging
 import time
@@ -21,6 +22,8 @@ class MirrorOperator(object):
         """
         :param env_vars: dictionary includes namespace,
             hostess_docker_registry (used in RegistryMirror),
+            ss_ds_labels (used in RegistryMirror, optional),
+            ss_ds_template_lables (used in RegistryMirror, optional)
             hostess_docker_image (used in RegistryMirror),
             hostess_docker_tag (used in RegistryMirror),
             image_pull_secrets(used in RegistryMirror, optional),
@@ -63,6 +66,9 @@ if __name__ == '__main__':
         hostess_docker_image=os.environ.get("HOSTESS_DOCKER_IMAGE",
                                             "ocadotechnology/mirror-hostess"),
         hostess_docker_tag=os.environ.get("HOSTESS_DOCKER_TAG", "1.1.0"),
+        # optional labels to be added to daemonsets and statefulsets
+        ss_ds_labels=ast.literal_eval(os.environ.get("SS_DS_LABELS")),
+        ss_ds_template_labels=ast.literal_eval(os.environ.get("SS_DS_TEMPLATE_LABELS")),
         # optional in V1PodSpec secrets split with comma
         image_pull_secrets=os.environ.get("IMAGE_PULL_SECRETS"),
         # get the docker certificate:

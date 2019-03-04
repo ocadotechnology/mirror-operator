@@ -41,6 +41,8 @@ class RegistryMirror(object):
         self.credentials_secret_name = kwargs.get(
             "spec", {}).get("credentialsSecret")
 
+        self.ss_ds_labels = kwargs["ss_ds_labels"] or ""
+        self.ss_ds_template_labels = kwargs["ss_ds_template_labels"] or ""
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
 
@@ -95,16 +97,16 @@ class RegistryMirror(object):
             location {healthcheck_path} {{{{
                 return 200 '';
             }}}}
-            
+
             #resolver;
             set $upstream_endpoint https://{upstream_fqdn};
-                
+
             location / {{{{
                 proxy_ssl_trusted_certificate {shared_cert_mount_path}/{cert_file};
                 limit_except HEAD GET OPTIONS {{{{
                     deny all;
                 }}}}
-                
+
                 proxy_pass                    $upstream_endpoint;
                 proxy_ssl_verify              on;
                 proxy_ssl_verify_depth        9;
@@ -131,15 +133,16 @@ class RegistryMirror(object):
             namespace=self.namespace,
             name=self.full_name,
             labels=self.labels,
-            owner_references=[
-                client.V1OwnerReference(
-                    api_version=self.apiVersion,
-                    name=name,
-                    kind=kind,
-                    uid=uid,
-                )
-            ]
+            # owner_references=[
+            #     client.V1OwnerReference(
+            #         api_version=self.apiVersion,
+            #         name=name,
+            #         kind=kind,
+            #         uid=uid,
+            #     )
+            #]
         )
+
         self.core_api = client.CoreV1Api()
         self.apps_api = client.AppsV1beta1Api()
         self.ext_api = client.ExtensionsV1beta1Api()
@@ -212,15 +215,12 @@ class RegistryMirror(object):
     def generate_daemon_set(self, daemon_set):
         ds_pod_labels = copy.deepcopy(self.labels)
         ds_pod_labels["component"] = "hostess-certificate"
-        ds_pod_labels["kube-monkey/enabled"] = "enabled"
-        ds_pod_labels["kube-monkey/identifier"] = self.full_name
+        ds_pod_labels.update(self.ss_ds_template_labels)
+        ds_labels = copy.deepcopy(self.labels)
+        ds_labels.update(self.ss_ds_labels)
         daemon_set.metadata = copy.deepcopy(self.metadata)
         daemon_set.metadata.name = self.daemon_set_name
-        daemon_set.metadata.labels["kube-monkey/enabled"] = "enabled"
-        daemon_set.metadata.labels["kube-monkey/identifier"] = self.full_name
-        daemon_set.metadata.labels["kube-monkey/mtbf"] = "3"
-        daemon_set.metadata.labels["kube-monkey/kill-mode"] = "fixed"
-        daemon_set.metadata.labels["kube-monkey/kill-value"] = "1"
+        daemon_set.metadata.labels = ds_labels 
         daemon_set.spec = client.V1beta1DaemonSetSpec(
                 min_ready_seconds=10,
                 template=client.V1PodTemplateSpec(
@@ -391,16 +391,12 @@ class RegistryMirror(object):
             )
         )
 
-        stateful_set.metadata.labels["kube-monkey/enabled"] = "enabled"
-        stateful_set.metadata.labels["kube-monkey/identifier"] = self.full_name
-        stateful_set.metadata.labels["kube-monkey/mtbf"] = "3"
-        stateful_set.metadata.labels["kube-monkey/kill-mode"] = "fixed"
-        stateful_set.metadata.labels["kube-monkey/kill-value"] = "1"
         stateful_set.spec.replicas = 2
+        ss_labels = copy.deepcopy(self.labels)
+        ss_labels.update(self.ss_ds_labels)
         pod_labels = {'component': 'registry'}
         pod_labels.update(self.labels)
-        pod_labels["kube-monkey/enabled"] = "enabled"
-        pod_labels["kube-monkey/identifier"] = self.full_name
+        pod_labels.update(self.ss_ds_template_labels)
         volumes = []
         if self.ca_certificate_bundle:
             volumes = [
@@ -559,6 +555,7 @@ class RegistryMirror(object):
                     )
                 )
         stateful_set.spec.update_strategy = client.V1beta1StatefulSetUpdateStrategy(type="RollingUpdate",)
+        stateful_set.metadata.labels = ss_labels
         return stateful_set
 
     def generate_secret(self, secret):

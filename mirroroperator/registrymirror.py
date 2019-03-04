@@ -133,14 +133,14 @@ class RegistryMirror(object):
             namespace=self.namespace,
             name=self.full_name,
             labels=self.labels,
-            # owner_references=[
-            #     client.V1OwnerReference(
-            #         api_version=self.apiVersion,
-            #         name=name,
-            #         kind=kind,
-            #         uid=uid,
-            #     )
-            #]
+            owner_references=[
+                client.V1OwnerReference(
+                    api_version=self.apiVersion,
+                    name=name,
+                    kind=kind,
+                    uid=uid,
+                )
+            ]
         )
 
         self.core_api = client.CoreV1Api()

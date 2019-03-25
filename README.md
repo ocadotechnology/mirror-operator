@@ -17,6 +17,7 @@ HOSTESS_DOCKER_IMAGE | The name of the docker image for mirror-hostess. | ocadot
 HOSTESS_DOCKER_TAG | The tag for the mirror-hostess docker image. | 1.1.0
 SS_DS_LABELS | (Optional) StatefulSet and DaemonSet labels | None
 SS_DS_TEMPLATE_LABELS | (Optional) StatefulSet and DaemonSet pod labels | None
+SS_DS_TOLERATIONS | (Optional) StatefulSet and DaemonSet pod tolerations | None
 IMAGE_PULL_SECRETS | (Optional) Secret to pull images from the upstream registry | None
 CA_CERTIFICATE_BUNDLE | (Optional) Certificate bundle for the registry host  | None
 

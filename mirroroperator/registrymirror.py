@@ -43,7 +43,10 @@ class RegistryMirror(object):
 
         self.ss_ds_labels = kwargs["ss_ds_labels"] or ""
         self.ss_ds_template_labels = kwargs["ss_ds_template_labels"] or ""
-        self.ss_ds_tolerations = kwargs["ss_ds_tolerations"] or ""
+        self.ss_ds_tolerations = []
+        if kwargs["ss_ds_tolerations"] is not None:
+            for t in kwargs["ss_ds_tolerations"]:
+                self.ss_ds_tolerations.append(client.V1Toleration(**t))
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
 

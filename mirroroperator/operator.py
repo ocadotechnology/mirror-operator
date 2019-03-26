@@ -57,7 +57,7 @@ class MirrorOperator(object):
 
 
 def safely_eval_env(env_var):
-    return ast.literal_eval(os.environ.get(env_var)) if env_var is not None else None
+    return ast.literal_eval(os.environ.get(env_var)) if os.environ.get(env_var) is not None else None
 
 
 if __name__ == '__main__':

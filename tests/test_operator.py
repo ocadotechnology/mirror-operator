@@ -33,7 +33,7 @@ class OperatorTestCase(KubernetesTestCase):
             "hostess_docker_tag": None,
             "ss_ds_labels": {"test":"test_labels"},
             "ss_ds_template_labels": {"test":"test_pod_labels"},
-            "ss_ds_tolerations": {"test": "test_taints"},
+            "ss_ds_tolerations": [{"key": "some.tol.era/tion", "operator": "Exists"}],
             "image_pull_secrets": None,
             "docker_certificate_secret": 'aaa',
             "ca_certificate_bundle": 'bbb',

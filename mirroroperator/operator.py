@@ -24,6 +24,7 @@ class MirrorOperator(object):
             hostess_docker_registry (used in RegistryMirror),
             ss_ds_labels (used in RegistryMirror, optional),
             ss_ds_template_lables (used in RegistryMirror, optional)
+            ss_ds_tolerations (used in RegistryMirror, optional)
             hostess_docker_image (used in RegistryMirror),
             hostess_docker_tag (used in RegistryMirror),
             image_pull_secrets(used in RegistryMirror, optional),
@@ -55,6 +56,10 @@ class MirrorOperator(object):
                 LOGGER.exception("Error watching custom object events", exc_info=True)
 
 
+def safely_eval_env(env_var):
+    return ast.literal_eval(os.environ.get(env_var)) if env_var is not None else None
+
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
@@ -67,8 +72,10 @@ if __name__ == '__main__':
                                             "ocadotechnology/mirror-hostess"),
         hostess_docker_tag=os.environ.get("HOSTESS_DOCKER_TAG", "1.1.0"),
         # optional labels to be added to daemonsets and statefulsets
-        ss_ds_labels=ast.literal_eval(os.environ.get("SS_DS_LABELS")),
-        ss_ds_template_labels=ast.literal_eval(os.environ.get("SS_DS_TEMPLATE_LABELS")),
+        ss_ds_labels=safely_eval_env("SS_DS_LABELS"),
+        ss_ds_template_labels=safely_eval_env("SS_DS_TEMPLATE_LABELS"),
+        # optional tolerations to be added to daemonsets and statefulsets
+        ss_ds_tolerations=safely_eval_env("SS_DS_TOLERATIONS"),
         # optional in V1PodSpec secrets split with comma
         image_pull_secrets=os.environ.get("IMAGE_PULL_SECRETS"),
         # get the docker certificate:

@@ -43,6 +43,7 @@ class RegistryMirror(object):
 
         self.ss_ds_labels = kwargs["ss_ds_labels"] or ""
         self.ss_ds_template_labels = kwargs["ss_ds_template_labels"] or ""
+        self.ss_ds_tolerations = kwargs["ss_ds_tolerations"] or ""
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
 
@@ -304,6 +305,7 @@ class RegistryMirror(object):
                                 ],
                             )
                         ],
+                        tolerations=self.ss_ds_tolerations,
                         image_pull_secrets=[{"name": name} for name in
                                             self.image_pull_secrets.split(",")],
                         service_account_name="mirror-hostess",
@@ -550,6 +552,7 @@ class RegistryMirror(object):
                                 volume_mounts=volumes_to_mount,
                             ),
                         ],
+                        tolerations=self.ss_ds_tolerations,
                         termination_grace_period_seconds=10,
                         volumes=volumes,
                     )

@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 
+testSnykIfEnabled() {
+  if [ -n "${SNYK_ORG}" ] && [ -n "${SNYK_TOKEN}" ]; then
+      local errors_found=false
+      snyk test --org="${SNYK_ORG}" --docker "${TRAVIS_REPO_SLUG}" --policy-path=.snyk --file=Dockerfile || errors_found=true
+      if ${errors_found} && [ "${SNYK_MODE}" != "WARN" ] ; then
+          exit 1
+      fi
+  fi
+}
+
 VERSION="$TRAVIS_COMMIT"
 if [ -n "${TRAVIS_TAG}" ]; then
   VERSION="${TRAVIS_TAG}"
@@ -19,6 +29,7 @@ docker build --pull --cache-from "$TRAVIS_REPO_SLUG" --tag "$TRAVIS_REPO_SLUG" \
   --label="org.opencontainers.image.revision=${TRAVIS_COMMIT}" \
   --label="org.opencontainers.image.authors=$(git log --format='%aE' Dockerfile | sort -u | tr '\n' ' ')" .
 
+testSnykIfEnabled
 
 if [ "${TRAVIS_TAG}" ]; then
   docker tag "${TRAVIS_REPO_SLUG}" "${TRAVIS_REPO_SLUG}:${TRAVIS_TAG}"

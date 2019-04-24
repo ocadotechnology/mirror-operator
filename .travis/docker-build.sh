@@ -4,6 +4,7 @@ testSnykIfEnabled() {
   if [ -n "${SNYK_ORG}" ] && [ -n "${SNYK_TOKEN}" ]; then
       local errors_found=false
       snyk test --org="${SNYK_ORG}" --docker "${TRAVIS_REPO_SLUG}" --policy-path=.snyk --file=Dockerfile || errors_found=true
+      snyk test --org="${SNYK_ORG}" --policy-path=.snyk --file=requirements.txt || errors_found=true
       if ${errors_found} && [ "${SNYK_MODE}" != "WARN" ] ; then
           exit 1
       fi

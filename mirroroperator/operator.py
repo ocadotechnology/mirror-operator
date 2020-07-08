@@ -41,23 +41,37 @@ class MirrorOperator(object):
     def watch_registry_mirrors(self):
         watcher = kubernetes.watch.Watch()
         try:
-            for event in watcher.stream(self.object_api.list_cluster_custom_object, CRD_GROUP, CRD_VERSION, CRD_PLURAL):
+            for event in watcher.stream(
+                self.object_api.list_cluster_custom_object,
+                CRD_GROUP,
+                CRD_VERSION,
+                CRD_PLURAL
+            ):
                 registry_mirror_kwargs = event['object'].copy()
                 registry_mirror_kwargs.update(self.registry_mirror_vars)
-                mirror = RegistryMirror(event_type=event['type'], **registry_mirror_kwargs)
+                LOGGER.debug("RM kwargs: {}".format(registry_mirror_kwargs))
+                mirror = RegistryMirror(
+                    event_type=event['type'], **registry_mirror_kwargs
+                )
                 mirror.apply()
         except ApiException as e:
             status = HTTPStatus(e.status)
             if status == HTTPStatus.NOT_FOUND:
-                raise NoCRDException("CRD not found. Please ensure you create a CRD with group - %s,"
-                                     "version - %s and plural - %s before this operator can run.",
-                                     CRD_GROUP, CRD_VERSION, CRD_PLURAL)
+                raise NoCRDException(
+                    "CRD not found. Please ensure you create a CRD with group"
+                    " - %s, version - %s and plural - %s before this operator"
+                    " can run.",
+                    CRD_GROUP, CRD_VERSION, CRD_PLURAL)
             else:
-                LOGGER.exception("Error watching custom object events", exc_info=True)
+                LOGGER.exception(
+                    "Error watching custom object events",
+                    exc_info=True
+                )
 
 
 def safely_eval_env(env_var):
-    return ast.literal_eval(os.environ.get(env_var)) if os.environ.get(env_var) is not None else None
+    return ast.literal_eval(os.environ.get(env_var)
+                            ) if os.environ.get(env_var) is not None else None
 
 
 if __name__ == '__main__':
@@ -67,7 +81,8 @@ if __name__ == '__main__':
     env_vars = dict(
         namespace=os.environ.get("NAMESPACE", "default"),
         # optional to allow for image to be pulled from elsewhere
-        hostess_docker_registry=os.environ.get("HOSTESS_DOCKER_REGISTRY", "docker.io"),
+        hostess_docker_registry=os.environ.get(
+            "HOSTESS_DOCKER_REGISTRY", "docker.io"),
         hostess_docker_image=os.environ.get("HOSTESS_DOCKER_IMAGE",
                                             "ocadotechnology/mirror-hostess"),
         hostess_docker_tag=os.environ.get("HOSTESS_DOCKER_TAG", "1.1.0"),

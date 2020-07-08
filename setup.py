@@ -14,7 +14,7 @@ test_dependencies = [
 ]
 dependencies = [
     'bitmath==1.3.3.1',
-    'kubernetes==3.0.0a1',
+    'kubernetes==11.0.0',
     'statsd==3.2.1',
     ]
 
@@ -46,6 +46,7 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.4',
         'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.8',
     ],
     entry_points={
     },

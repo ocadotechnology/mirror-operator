@@ -36,7 +36,8 @@ class RegistryMirror(object):
         self.apiVersion = kwargs.get("apiVersion")
         upstream_url = kwargs.get("spec", {}).get("upstreamUrl")
 
-        self.masquerade_url = kwargs.get("spec", {}).get("masqueradeUrl", "mirror-"+upstream_url)
+        self.masquerade_url = kwargs.get("spec", {}).get(
+            "masqueradeUrl", "mirror-"+upstream_url)
 
         self.credentials_secret_name = kwargs.get(
             "spec", {}).get("credentialsSecret")
@@ -50,16 +51,18 @@ class RegistryMirror(object):
         self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
 
-        self.volume_claim_spec = client.V1PersistentVolumeClaimSpec(**kwargs.get(
-            "spec",
-            {},
-        ).get(
-            "volumeClaimTemplate",
-            {},
-        ).get(
-            "spec",
-            {},
-        ))
+        self.volume_claim_spec = client.V1PersistentVolumeClaimSpec(
+            **kwargs.get(
+                "spec",
+                {},
+            ).get(
+                "volumeClaimTemplate",
+                {},
+            ).get(
+                "spec",
+                {},
+            )
+        )
         if not self.volume_claim_spec.access_modes:
             self.volume_claim_spec.access_modes = ["ReadWriteOnce"]
         if not self.volume_claim_spec.resources:
@@ -148,8 +151,7 @@ class RegistryMirror(object):
         )
 
         self.core_api = client.CoreV1Api()
-        self.apps_api = client.AppsV1beta1Api()
-        self.ext_api = client.ExtensionsV1beta1Api()
+        self.apps_api = client.AppsV1Api()
 
     def apply(self):
         if self.event_type != "DELETED":
@@ -172,7 +174,7 @@ class RegistryMirror(object):
             )
 
             daemon_set = self.run_action_and_parse_error(
-                self.ext_api.read_namespaced_daemon_set,
+                self.apps_api.read_namespaced_daemon_set,
                 self.daemon_set_name,
                 self.namespace
             )
@@ -224,9 +226,10 @@ class RegistryMirror(object):
         ds_labels.update(self.ss_ds_labels)
         daemon_set.metadata = copy.deepcopy(self.metadata)
         daemon_set.metadata.name = self.daemon_set_name
-        daemon_set.metadata.labels = ds_labels 
-        daemon_set.spec = client.V1beta1DaemonSetSpec(
+        daemon_set.metadata.labels = ds_labels
+        daemon_set.spec = client.V1DaemonSetSpec(
                 min_ready_seconds=10,
+                selector=self.labels,
                 template=client.V1PodTemplateSpec(
                     metadata=client.V1ObjectMeta(
                         labels=ds_pod_labels
@@ -345,7 +348,7 @@ class RegistryMirror(object):
                                  )]
                     )
                 ),
-                update_strategy=client.V1beta1DaemonSetUpdateStrategy(
+                update_strategy=client.V1DaemonSetUpdateStrategy(
                     type="RollingUpdate"
                 )
             )
@@ -380,12 +383,14 @@ class RegistryMirror(object):
         return (the_user, the_pass)
 
     def generate_stateful_set(self):
-        stateful_set = client.V1beta1StatefulSet(
+        stateful_set = client.V1StatefulSet(
             metadata=self.metadata,
-            spec=client.V1beta1StatefulSetSpec(
+            spec=client.V1StatefulSetSpec(
                 # we can't update service name or pod management policy
                 service_name=self.full_name + "-headless",
                 pod_management_policy="Parallel",
+                selector=self.labels,
+                template=client.V1PodTemplateSpec(),
                 # we can't update volume claim templates
                 volume_claim_templates=[client.V1PersistentVolumeClaim(
                     metadata=client.V1ObjectMeta(
@@ -560,7 +565,7 @@ class RegistryMirror(object):
                         volumes=volumes,
                     )
                 )
-        stateful_set.spec.update_strategy = client.V1beta1StatefulSetUpdateStrategy(type="RollingUpdate",)
+        stateful_set.spec.update_strategy = client.V1StatefulSetUpdateStrategy(type="RollingUpdate",)
         stateful_set.metadata.labels = ss_labels
         return stateful_set
 
@@ -586,8 +591,9 @@ class RegistryMirror(object):
             )
         )
         if not service:
-            self.run_action_and_parse_error(self.core_api.create_namespaced_service,
-                                            self.namespace, empty_service)
+            self.run_action_and_parse_error(
+                self.core_api.create_namespaced_service,
+                self.namespace, empty_service)
             LOGGER.info("Service created")
 
         else:
@@ -644,15 +650,15 @@ class RegistryMirror(object):
                                             secret)
 
     def update_daemon_set(self, daemon_set):
-        empty_daemon_set = client.V1beta1DaemonSet()
+        empty_daemon_set = client.V1DaemonSet()
         if not daemon_set:
             daemon_set = self.generate_daemon_set(empty_daemon_set)
-            self.run_action_and_parse_error(self.ext_api.create_namespaced_daemon_set,
+            self.run_action_and_parse_error(self.apps_api.create_namespaced_daemon_set,
                                             self.namespace, daemon_set)
             LOGGER.info("Daemon set created")
         else:
             daemon_set = self.generate_daemon_set(daemon_set)
             self.run_action_and_parse_error(
-                self.ext_api.replace_namespaced_daemon_set,
+                self.apps_api.replace_namespaced_daemon_set,
                 daemon_set.metadata.name, self.namespace, daemon_set)
             LOGGER.info("Daemon set replaced")

@@ -1,14 +1,14 @@
 import base64
 import json
 
-EMPTY_SERVICE = """{"api_version": "v1",
+EMPTY_SERVICE = """{"apiVersion": "v1",
      "kind": "Service",
      "metadata": {
                   "creation_timestamp": "2017-09-12T13:23:47Z",
                   "labels": {"app": "docker-registry", "mirror": "hub"},
                   "name": "registry-mirror-hub",
                   "namespace": "default",
-                  "ownerReferences": [{"api_version": "k8s.osp.tech/v1",
+                  "ownerReferences": [{"apiVersion": "k8s.osp.tech/v1",
                                         "kind": "RegistryMirror",
                                         "name": "hub",
                                         "uid": "c7137776-97b7-11e7-a6e5-0800276be3ff"}],
@@ -27,11 +27,11 @@ EMPTY_SERVICE = """{"api_version": "v1",
 
 EMPTY_DAEMON_SET = """{
     "kind":"DaemonSet",
-    "apiVersion":"extensions/v1beta1",
+    "apiVersion":"apps/v1",
     "metadata": {
                 "name":"registry-mirror-hub-utils",
                 "namespace":"default",
-                "selfLink":"/apis/extensions/v1beta1/namespaces/default/daemonsets/registry-mirror-hub-utils",
+                "selfLink":"/apis/apps/v1/namespaces/default/daemonsets/registry-mirror-hub-utils",
                 "uid":"dff71ac8-97c2-11e7-a6e5-0800276be3ff",
                 "resourceVersion":"18519",
                 "generation":1,
@@ -99,11 +99,11 @@ EMPTY_DAEMON_SET = """{
 
 EMPTY_STATEFUL_SET = """{
     "kind":"StatefulSet",
-    "apiVersion":"apps/v1beta1",
+    "apiVersion":"apps/v1",
     "metadata": {
         "name":"registry-mirror-hub",
         "namespace":"default",
-        "selfLink":"/apis/apps/v1beta1/namespaces/default/statefulsets/registry-mirror-hub",
+        "selfLink":"/apis/apps/v1/namespaces/default/statefulsets/registry-mirror-hub",
         "uid":"512e7799-97c4-11e7-a6e5-0800276be3ff",
         "resourceVersion":"20254",
         "generation":1,

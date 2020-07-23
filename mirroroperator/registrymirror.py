@@ -152,6 +152,8 @@ class RegistryMirror(object):
 
         self.core_api = client.CoreV1Api()
         self.apps_api = client.AppsV1Api()
+        self.priority_class = kwargs.get(
+            "spec", {}).get("priorityClass", "user-standard")
 
     def apply(self):
         if self.event_type != "DELETED":
@@ -229,7 +231,7 @@ class RegistryMirror(object):
         daemon_set.metadata.labels = ds_labels
         daemon_set.spec = client.V1DaemonSetSpec(
                 min_ready_seconds=10,
-                selector=self.labels,
+                selector= {"matchLabels": self.labels},
                 template=client.V1PodTemplateSpec(
                     metadata=client.V1ObjectMeta(
                         labels=ds_pod_labels
@@ -389,7 +391,7 @@ class RegistryMirror(object):
                 # we can't update service name or pod management policy
                 service_name=self.full_name + "-headless",
                 pod_management_policy="Parallel",
-                selector=self.labels,
+                selector= {"matchLabels": self.labels},
                 template=client.V1PodTemplateSpec(),
                 # we can't update volume claim templates
                 volume_claim_templates=[client.V1PersistentVolumeClaim(
@@ -563,6 +565,7 @@ class RegistryMirror(object):
                         tolerations=self.ss_ds_tolerations,
                         termination_grace_period_seconds=10,
                         volumes=volumes,
+                        priority_class_name=self.priority_class
                     )
                 )
         stateful_set.spec.update_strategy = client.V1StatefulSetUpdateStrategy(type="RollingUpdate",)

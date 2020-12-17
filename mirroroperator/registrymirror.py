@@ -264,7 +264,7 @@ class RegistryMirror(object):
                                     self.hostess_docker_registry,
                                     self.hostess_docker_image,
                                     self.hostess_docker_tag),
-                                image_pull_policy="Always",
+                                image_pull_policy="IfNotPresent",
                                 resources=client.V1ResourceRequirements(
                                     requests={
                                         "memory": "64Mi", "cpu": "0.001"
@@ -298,8 +298,9 @@ class RegistryMirror(object):
                                     "-u",
                                     "-x"
                                 ],
-                                image="alpine:3.6",
-                                image_pull_policy="Always",
+                                image="{}/alpine:3.6".format(
+                                    self.hostess_docker_registry),
+                                image_pull_policy="IfNotPresent",
                                 resources=client.V1ResourceRequirements(
                                     requests={"memory": "1Mi", "cpu": "0.001"},
                                     limits={"memory": "32Mi", "cpu": "0.1"}

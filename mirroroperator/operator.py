@@ -103,8 +103,9 @@ if __name__ == '__main__':
         ca_certificate_bundle=os.environ.get("CA_CERTIFICATE_BUNDLE"),
     )
     # HOSTESS_DOCKER_REGISTRY is deprecated in favor of DOCKER_REGISTRY
-    if env_vars.docker_registry != "docker.io":
-        env_vars.hostess_docker_registry = env_vars.docker_registry
+    if env_vars["docker_registry"] != "docker.io":
+        env_vars["hostess_docker_registry"] = env_vars["docker_registry"]
+
     operator = MirrorOperator(env_vars)
 
     sleep_time = os.environ.get("SECONDS_BETWEEN_STREAMS", 30)

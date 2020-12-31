@@ -18,11 +18,14 @@ LOGGER = logging.getLogger(__name__)
 
 
 class RegistryMirror(object):
-    def __init__(self, event_type, namespace, hostess_docker_registry,
-                 hostess_docker_image, hostess_docker_tag,
-                 docker_certificate_secret, **kwargs):
+    def __init__(self, event_type, namespace, docker_registry,
+                 hostess_docker_registry, hostess_docker_image,
+                 hostess_docker_tag, docker_certificate_secret, **kwargs):
         self.event_type = event_type
         self.namespace = namespace
+        self.docker_registry = docker_registry
+        # Option to set Docker registry only for hostess images is
+        # deprecated in favor of setting it for all used images
         self.hostess_docker_registry = hostess_docker_registry
         self.hostess_docker_image = hostess_docker_image
         self.hostess_docker_tag = hostess_docker_tag
@@ -519,7 +522,8 @@ class RegistryMirror(object):
                         init_containers=[
                             client.V1Container(
                                 name="generate-ca-certs",
-                                image="cloudbees/docker-certificates:1.2",
+                                image="{}/cloudbees/docker-certificates:1.2".format(
+                                    self.docker_registry),
                                 command=["/bin/sh"],
                                 args=["-c", script],
                                 volume_mounts=generate_ca_certs_volume_mounts,
@@ -527,7 +531,8 @@ class RegistryMirror(object):
                             ),
                             client.V1Container(
                                 name="get-nameservers",
-                                image="busybox",
+                                image="{}/busybox".format(
+                                    self.docker_registry),
                                 command=["/bin/sh"],
                                 args=["-c", script_munge_nameservers],
                                 volume_mounts=[
@@ -547,7 +552,8 @@ class RegistryMirror(object):
                         containers=[
                             client.V1Container(
                                 name="registry",
-                                image="nginx:1.13.3-alpine",
+                                image="{}/nginx:1.13.3-alpine".format(
+                                    self.docker_registry),
                                 readiness_probe=client.V1Probe(
                                     http_get=client.V1HTTPGetAction(
                                         path=HEALTH_CHECK_PATH,

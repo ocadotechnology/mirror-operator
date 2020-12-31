@@ -21,7 +21,8 @@ class MirrorOperator(object):
     def __init__(self, env_vars):
         """
         :param env_vars: dictionary includes namespace,
-            hostess_docker_registry (used in RegistryMirror),
+            docker_registry (used in RegistryMirror),
+            hostess_docker_registry (used in RegistryMirror, deprecated),
             ss_ds_labels (used in RegistryMirror, optional),
             ss_ds_template_lables (used in RegistryMirror, optional)
             ss_ds_tolerations (used in RegistryMirror, optional)
@@ -81,6 +82,9 @@ if __name__ == '__main__':
     env_vars = dict(
         namespace=os.environ.get("NAMESPACE", "default"),
         # optional to allow for image to be pulled from elsewhere
+        docker_registry=os.environ.get(
+            "DOCKER_REGISTRY", "docker.io"),
+        # TODO: remove 'hostess_docker_registry' in 1.0.0
         hostess_docker_registry=os.environ.get(
             "HOSTESS_DOCKER_REGISTRY", "docker.io"),
         hostess_docker_image=os.environ.get("HOSTESS_DOCKER_IMAGE",
@@ -98,6 +102,9 @@ if __name__ == '__main__':
         # get ca certificate
         ca_certificate_bundle=os.environ.get("CA_CERTIFICATE_BUNDLE"),
     )
+    # HOSTESS_DOCKER_REGISTRY is deprecated in favor of DOCKER_REGISTRY
+    if env_vars.docker_registry != "docker.io":
+        env_vars.hostess_docker_registry = env_vars.docker_registry
     operator = MirrorOperator(env_vars)
 
     sleep_time = os.environ.get("SECONDS_BETWEEN_STREAMS", 30)

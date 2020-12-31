@@ -17,6 +17,7 @@ class CustomResourceTestCase(KubernetesTestCase):
         super().setUp()
         self.env_var_dict = {
             "namespace": "default",
+            "docker_registry": "docker.io",
             "hostess_docker_registry": "docker.io",
             "hostess_docker_image": "ocadotechnology/mirror-hostess",
             "hostess_docker_tag": 2,

@@ -121,8 +121,6 @@ class RegistryMirror(object):
                 proxy_ssl_verify              on;
                 proxy_ssl_verify_depth        9;
                 proxy_ssl_session_reuse       on;
-                proxy_ssl_name                $host;
-                proxy_ssl_server_name         on;
                 {{auth}}
                 proxy_cache                   {zone};
                 proxy_cache_valid             7d;

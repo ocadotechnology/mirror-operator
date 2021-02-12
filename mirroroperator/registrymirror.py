@@ -351,7 +351,8 @@ class RegistryMirror(object):
                                      secret=client.V1SecretVolumeSource(
                                          secret_name=self.docker_certificate_secret
                                      )
-                                 )]
+                                 )],
+                        priority_class_name=self.priority_class
                     )
                 ),
                 update_strategy=client.V1DaemonSetUpdateStrategy(

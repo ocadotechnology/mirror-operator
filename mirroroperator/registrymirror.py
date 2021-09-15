@@ -1,11 +1,11 @@
-import bitmath
-from kubernetes import client
-from kubernetes.client.rest import ApiException
 import logging
 import copy
 import base64
 import json
 from http import HTTPStatus
+import bitmath
+from kubernetes import client
+from kubernetes.client.rest import ApiException
 
 REGISTRY_CERT_DIR = '/etc/registry-certs'
 UPSTREAM_CERT_DIR = '/etc/upstream-certs'
@@ -17,8 +17,12 @@ CERT_FILE = "ca-certificates.crt"
 LOGGER = logging.getLogger(__name__)
 
 
-class RegistryMirror(object):
+# pylint: disable=too-many-instance-attributes
+class RegistryMirror:
+    # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-locals
     def __init__(self, event_type, namespace, docker_registry,
+                 addressing_scheme,
                  hostess_docker_registry, hostess_docker_image,
                  hostess_docker_tag, docker_certificate_secret, **kwargs):
         self.event_type = event_type
@@ -27,6 +31,7 @@ class RegistryMirror(object):
         # Option to set Docker registry only for hostess images is
         # deprecated in favor of setting it for all used images
         self.hostess_docker_registry = hostess_docker_registry
+        self.addressing_scheme = addressing_scheme
         self.hostess_docker_image = hostess_docker_image
         self.hostess_docker_tag = hostess_docker_tag
         self.docker_certificate_secret = docker_certificate_secret
@@ -73,7 +78,9 @@ class RegistryMirror(object):
                 requests={"storage": "20Gi"}
             ).to_dict()
 
-        cache_size_limit = int(bitmath.parse_string_unsafe(self.volume_claim_spec.resources['requests']['storage']).to_GB() * 0.8)
+        cache_size_limit = int(
+            bitmath.parse_string_unsafe(
+                self.volume_claim_spec.resources['requests']['storage']).to_GB() * 0.8)
 
         self.nginx_config_template = '''
         log_format json_combined escape=json
@@ -112,6 +119,7 @@ class RegistryMirror(object):
             set $upstream_endpoint https://{upstream_fqdn};
 
             location / {{{{
+                rewrite /v2/{masquerade_url}/(.*) /v2/$1 break;
                 proxy_ssl_trusted_certificate {shared_cert_mount_path}/{cert_file};
                 limit_except HEAD GET OPTIONS {{{{
                     deny all;
@@ -131,6 +139,7 @@ class RegistryMirror(object):
         }}}}'''.format(registry_cert_dir=REGISTRY_CERT_DIR, cache_dir=CACHE_DIR,
                        cache_size_limit=cache_size_limit,
                        upstream_fqdn=upstream_url, zone="the_zone",
+                       masquerade_url=self.masquerade_url,
                        healthcheck_path=HEALTH_CHECK_PATH,
                        shared_cert_mount_path=SHARED_CERT_MOUNT_PATH, cert_file=CERT_FILE)
 
@@ -155,6 +164,7 @@ class RegistryMirror(object):
 
         self.core_api = client.CoreV1Api()
         self.apps_api = client.AppsV1Api()
+        self.object_api = client.CustomObjectsApi()
         self.priority_class = kwargs.get(
             "spec", {}).get("priorityClass", "user-standard")
 
@@ -165,6 +175,16 @@ class RegistryMirror(object):
                 self.full_name,
                 self.namespace
             )
+
+            if self.addressing_scheme == "services":
+                certificate = self.run_action_and_parse_error(
+                    self.object_api.get_namespaced_custom_object,
+                        group="cert-manager.io",
+                        version="v1",
+                        plural="certificates",
+                        name=self.full_name,
+                        namespace=self.namespace,
+                )
 
             service_headless = self.run_action_and_parse_error(
                 self.core_api.read_namespaced_service,
@@ -191,10 +211,13 @@ class RegistryMirror(object):
             )
 
             self.update_services(service, service_headless)
+            if self.addressing_scheme == "services":
+                self.update_certificate(certificate)
             self.update_stateful_set(stateful_set)
             self.update_daemon_set(daemon_set)
             self.update_secret(secret)
 
+    # pylint: disable=no-self-use
     def run_action_and_parse_error(self, func, *args, **kwargs):
         """ Helper method to avoid try/excepts all over the place + does
         the exception handling and parsing.
@@ -214,9 +237,13 @@ class RegistryMirror(object):
             try:
                 json_error = json.loads(api_exception.body)
                 code = HTTPStatus(int(json_error['code']))
-                LOGGER.exception(
-                    "API returned status: %s, msg: %s, method: %s",
-                    code, json_error['message'], func)
+                if code == HTTPStatus.NOT_FOUND:
+                    LOGGER.info("API object not found: %s, %s",
+                        json_error['message'], func)
+                else:
+                    LOGGER.exception(
+                        "API returned status: %s, msg: %s, method: %s",
+                        code, json_error['message'], func)
 
             except json.decoder.JSONDecodeError as e:
                 LOGGER.error("Decoder exception loading error msg: %s;"
@@ -232,16 +259,8 @@ class RegistryMirror(object):
         daemon_set.metadata = copy.deepcopy(self.metadata)
         daemon_set.metadata.name = self.daemon_set_name
         daemon_set.metadata.labels = ds_labels
-        daemon_set.spec = client.V1DaemonSetSpec(
-                min_ready_seconds=10,
-                selector= {"matchLabels": self.labels},
-                template=client.V1PodTemplateSpec(
-                    metadata=client.V1ObjectMeta(
-                        labels=ds_pod_labels
-                    ),
-                    spec=client.V1PodSpec(
-                        containers=[
-                            client.V1Container(
+
+        hostess_container = client.V1Container(
                                 name="mirror-hostess",
                                 env=[
                                     client.V1EnvVar(
@@ -288,10 +307,12 @@ class RegistryMirror(object):
                                         mount_path="/var/lock/hostess",
                                     ),
                                 ],
-                            ),
-                            client.V1Container(
+                            )
+
+        certinstall_container = client.V1Container(
                                 name="certificate-installation",
                                 args=[
+                                    # pylint: disable=line-too-long
                                     "cp /source/tls.crt /target/tls.crt; while :; do sleep 2073600; done"
                                 ],
                                 command=[
@@ -316,7 +337,33 @@ class RegistryMirror(object):
                                                          read_only=True),
                                 ],
                             )
-                        ],
+
+        if self.addressing_scheme == "hostess":
+            daemonset_containers = [hostess_container, certinstall_container]
+            docker_cert_path = self.masquerade_url
+        elif self.addressing_scheme == "services":
+            daemonset_containers = [certinstall_container]
+            service = self.run_action_and_parse_error(
+                self.core_api.read_namespaced_service,
+                self.full_name,
+                self.namespace
+            )
+            if not service:
+                LOGGER.error("Service %s not found. Daemonset not created", self.full_name)
+                return None
+            docker_cert_path = service.spec.cluster_ip
+        else:
+            LOGGER.error("Unknown addressing scheme: %s", self.addressing_scheme)
+
+        daemon_set.spec = client.V1DaemonSetSpec(
+                min_ready_seconds=10,
+                selector= {"matchLabels": self.labels},
+                template=client.V1PodTemplateSpec(
+                    metadata=client.V1ObjectMeta(
+                        labels=ds_pod_labels
+                    ),
+                    spec=client.V1PodSpec(
+                        containers=daemonset_containers,
                         tolerations=self.ss_ds_tolerations,
                         image_pull_secrets=[{"name": name} for name in
                                             self.image_pull_secrets.split(",")],
@@ -343,7 +390,7 @@ class RegistryMirror(object):
                                  client.V1Volume(
                                      name="docker-certs",
                                      host_path=client.V1HostPathVolumeSource(
-                                         path="/etc/docker/certs.d/{}".format(self.masquerade_url)
+                                         path="/etc/docker/certs.d/{}".format(docker_cert_path)
                                      ),
                                  ),
                                  client.V1Volume(
@@ -369,11 +416,12 @@ class RegistryMirror(object):
     def get_upstream_credentials(self):
         credentials_secret = None
         if self.credentials_secret_name:
-            credentials_secret = self.run_action_and_parse_error(self.core_api.read_namespaced_secret,
-                                                                 self.credentials_secret_name,
-                                                                 self.namespace)
+            credentials_secret = self.run_action_and_parse_error(
+                self.core_api.read_namespaced_secret,
+                self.credentials_secret_name,
+                self.namespace)
         if not credentials_secret:
-            LOGGER.error("No secret named %s was found in the %s namespace, will use unauth access",
+            LOGGER.info("No secret named %s was found in the %s namespace, will use unauth access",
                          self.credentials_secret_name, self.namespace)
             return None
 
@@ -425,14 +473,28 @@ class RegistryMirror(object):
                 )
             ]
 
-        volumes.append(
-            client.V1Volume(
-                name="tls",
-                secret=client.V1SecretVolumeSource(
-                    secret_name=self.docker_certificate_secret
-                ),
+        if self.addressing_scheme == 'hostess':
+            volumes.append(
+                client.V1Volume(
+                    name="tls",
+                    secret=client.V1SecretVolumeSource(
+                        secret_name=self.docker_certificate_secret
+                    ),
+                )
             )
-        )
+        elif self.addressing_scheme == 'services':
+            volumes.append(
+                client.V1Volume(
+                    name="tls",
+                    secret=client.V1SecretVolumeSource(
+                        secret_name=self.full_name + "-tls"
+                    ),
+                )
+            )
+        else:
+            LOGGER.error("Unknown addressing scheme: %s", self.addressing_scheme)
+            return None
+
         volumes.append(
             client.V1Volume(
                 name="nginx-config",
@@ -510,7 +572,7 @@ class RegistryMirror(object):
                 cp /etc/nginx/conf.d/default.conf /tmp/nginx/default.conf
                 NAMESERVERS=$(cat /etc/resolv.conf | grep "nameserver" | awk '{{print $2}}' | tr '\n' ' ')
                 if [ ! "$NAMESERVERS" == "" ]; then
-                    sed -E -i "s/(#)(resolver)(;)/\\2 ${NAMESERVERS}\\3/" /tmp/nginx/default.conf
+                    sed -E -i "s/(#)(resolver)(;)/\\2 ${NAMESERVERS} ipv6=off\\3/" /tmp/nginx/default.conf
                 fi
                 '''
         stateful_set.spec.template = client.V1PodTemplateSpec(
@@ -576,7 +638,8 @@ class RegistryMirror(object):
                         priority_class_name=self.priority_class
                     )
                 )
-        stateful_set.spec.update_strategy = client.V1StatefulSetUpdateStrategy(type="RollingUpdate",)
+        stateful_set.spec.update_strategy = client.V1StatefulSetUpdateStrategy(
+            type="RollingUpdate",)
         stateful_set.metadata.labels = ss_labels
         return stateful_set
 
@@ -592,6 +655,69 @@ class RegistryMirror(object):
         nginx_config = self.nginx_config_template.format(auth=auth)
         secret.data = {"default.conf": base64.b64encode(nginx_config.encode()).decode()}
         return secret
+
+    def update_certificate(self, certificate):
+        """ Create a certificate for IP address of the given service """
+        service = self.run_action_and_parse_error(
+            self.core_api.read_namespaced_service,
+            self.full_name,
+            self.namespace
+        )
+        if not service:
+            LOGGER.error("Service not found. Cannot create Certificate")
+            return
+
+        if not certificate:
+            cert_metadata = copy.deepcopy(self.metadata)
+            certificate = {
+                "apiVersion": "cert-manager.io/v1",
+                "kind": "Certificate",
+                "metadata": cert_metadata,
+                "spec": {
+                    "ipAddresses": [service.spec.cluster_ip],
+                    "duration": "2160h0m0s",
+                    "issuerRef": { "kind": "Issuer", "name": "mirror-operator-issuer" },
+                    "privateKey": {
+                        "algorithm": "RSA",
+                        "encoding": "PKCS1",
+                        "size": 2048
+                    },
+                    "secretName": self.full_name + "-tls",
+                    "secretTemplate": cert_metadata,
+                    "subject": {
+                        "organizations": ["mirror-operator"],
+                    },
+                    "usages": ["server auth", "client auth"],
+                }
+            }
+            self.run_action_and_parse_error(self.object_api.create_namespaced_custom_object,
+                    group="cert-manager.io",
+                    version="v1",
+                    namespace="kube-extra",
+                    plural="certificates",
+                    body=certificate,
+                )
+
+            LOGGER.info("Certificate for the %s (service %s) created",
+                        service.spec.cluster_ip, self.full_name)
+        else:
+            # NOTE: It will be needed if Service address will be changed.
+            patch_body = {
+                "spec": {"ipAddresses": [service.spec.cluster_ip]}
+            }
+
+            self.run_action_and_parse_error(self.object_api.patch_namespaced_custom_object,
+                    name=self.full_name,
+                    group="cert-manager.io",
+                    version="v1",
+                    namespace="kube-extra",
+                    plural="certificates",
+                    body=patch_body,
+                )
+
+            LOGGER.info("Updating Certificate for the service %s", self.full_name)
+
+
 
     def update_services(self, service, service_headless):
         empty_service = client.V1Service(

@@ -15,7 +15,7 @@ More details follow.
 For each `RegistryMirror` a separate StatefulSet is created. It installs Nginx-based caching
 HTTP proxies with an upstream configured from `upstreamUrl`, `masqueradeUrl` and optional `credentialsSecret`
 fields. Also, for each RegistryMirror the Service is created, providing an access to the registry
-proxiy.
+proxy.
 
 If `masqueradeUrl` is not provided explicitly, it is constructed from `upstreamUrl` by
 prepending it with `mirror-` prefix.

@@ -686,7 +686,7 @@ class RegistryMirror:
                 "metadata": cert_metadata,
                 "spec": {
                     "ipAddresses": [service.spec.cluster_ip],
-                    "duration": "17520h0m0",
+                    "duration": "17520h0m0s",
                     "issuerRef": { "kind": "Issuer", "name": "mirror-operator-issuer" },
                     "privateKey": {
                         "algorithm": "RSA",

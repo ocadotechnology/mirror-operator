@@ -129,18 +129,14 @@ class MirrorOperator:
                 "imageswap-maps",
                 imageswap_namespace
         )
-        self.cm_lock.release()
 
         with open(VERSION_FILE, "r", encoding='utf-8') as store:
             stored_cm_version = store.read()
-            if stored_cm_version == configmap.metadata.resource_version:
-                sys.exit()
-            else:
-                LOGGER.error("Configmap has been modified not by the mirror operator")
-                sys.exit(1)
+            self.cm_lock.release()
+            if stored_cm_version != configmap.metadata.resource_version:
+                return False
+            return True
 
-
-        return False
 
 def safely_eval_env(env_var):
     return ast.literal_eval(os.environ.get(env_var)
@@ -180,8 +176,6 @@ def main():
     if env_vars["docker_registry"] != "docker.io":
         env_vars["hostess_docker_registry"] = env_vars["docker_registry"]
 
-    operator = MirrorOperator(env_vars)
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--map-update",
                         help="Update the imageswap-maps Config Map",
@@ -198,6 +192,8 @@ def main():
         )
         sys.exit(1)
 
+    operator = MirrorOperator(env_vars)
+
     if args.map_update:
         operator.update_imageswap_config()
         sys.exit()
@@ -207,6 +203,7 @@ def main():
         if map_current:
             sys.exit()
         else:
+            LOGGER.error("Configmap has been modified not by the mirror operator")
             sys.exit(1)
 
     sleep_time = os.environ.get("SECONDS_BETWEEN_STREAMS", 30)

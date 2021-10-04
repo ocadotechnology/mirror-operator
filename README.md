@@ -60,6 +60,24 @@ is installed into `/etc/docker/certs.d/<masqueradeUrl>/` directory. In "services
 is installed into `/etc/docker/certs.d/<clusterIp>/`, where `<clusterIp>` is the IP address of the caching
 proxy service.
 
+### Detecting the unexpected `imageswap-map` changes
+
+There is a possibility that, while operating in the 'services' mode, config map for ImageSwap,
+`imageswap-maps`, is modified by hands or by another deployment. With this, mirror-operator
+will not detect these changes, and would not update the config map.
+With the use of the `--map-check` command-line switch it is possible to discover such a situation.
+For this, aadd the livenessProbe like this:
+```
+        livenessProbe:
+          exec:
+            command:
+            - /usr/local/bin/python
+            - /app/mirroroperator/operator.py
+            - --map-check
+```
+Having this configured, the unexpected change in the Config Map is detected and
+the container is restarted.
+
 ## Configuration
 The following environment variables can be set:
 

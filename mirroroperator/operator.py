@@ -1,9 +1,12 @@
 import ast
+import argparse
 import json
 import logging
 import time
 import os
+import sys
 from http import HTTPStatus
+import fasteners
 import kubernetes
 
 from kubernetes.client.rest import ApiException
@@ -17,12 +20,11 @@ CRD_GROUP = "k8s.osp.tech"
 CRD_VERSION = "v1"
 CRD_PLURAL = "registrymirrors"
 
+VERSION_FILE="/var/run/imageswap_configmap_version"
+
 
 # pylint: disable=too-few-public-methods
 class MirrorOperator:
-    # pylint: disable=fixme
-    # FIXME: pylint warning: redefined-outer-name: Redefining name 'env_vars' from outer scope
-    # pylint: disable=redefined-outer-name
     def __init__(self, env_vars):
         """
         :param env_vars: dictionary includes namespace,
@@ -32,7 +34,8 @@ class MirrorOperator:
             ss_ds_template_lables (used in RegistryMirror, optional)
             ss_ds_tolerations (used in RegistryMirror, optional)
             addressing_scheme ('hostess' or 'services', defaults to 'hostess', optional)
-            imageswap_namespace (used in MirrorOperator, default to the operator namespace, optional)
+            imageswap_namespace (used in MirrorOperator,
+                                 default to the operator namespace, optional)
             hostess_docker_image (used in RegistryMirror),
             hostess_docker_tag (used in RegistryMirror),
             image_pull_secrets(used in RegistryMirror, optional),
@@ -45,6 +48,7 @@ class MirrorOperator:
         kubernetes.config.load_incluster_config()
         self.object_api = kubernetes.client.CustomObjectsApi()
         self.core_api = kubernetes.client.CoreV1Api()
+        self.cm_lock = fasteners.InterProcessLock(VERSION_FILE + ".lck")
 
     def watch_registry_mirrors(self):
         watcher = kubernetes.watch.Watch()
@@ -103,18 +107,41 @@ class MirrorOperator:
             imageswap_config += "{0}:{1}/{0}\n".format(masqueraded_name, service_ip)
         LOGGER.info("Imageswap config: %s", imageswap_config)
         imageswap_namespace = self.registry_mirror_vars['imageswap_namespace']
-        self.core_api.patch_namespaced_config_map(
+
+        self.cm_lock.acquire()
+
+        configmap = self.core_api.patch_namespaced_config_map(
                 "imageswap-maps",
                 imageswap_namespace,
                 {"data": {"maps": imageswap_config}}
         )
 
+        with open(VERSION_FILE, "w", encoding='utf-8') as store:
+            store.write(configmap.metadata.resource_version)
+
+        self.cm_lock.release()
+
+    def is_imageswap_config_current(self):
+        imageswap_namespace = self.registry_mirror_vars['imageswap_namespace']
+
+        self.cm_lock.acquire()
+        configmap = self.core_api.read_namespaced_config_map(
+                "imageswap-maps",
+                imageswap_namespace
+        )
+
+        with open(VERSION_FILE, "r", encoding='utf-8') as store:
+            stored_cm_version = store.read()
+            self.cm_lock.release()
+            if stored_cm_version != configmap.metadata.resource_version:
+                return False
+            return True
+
+
 def safely_eval_env(env_var):
     return ast.literal_eval(os.environ.get(env_var)
                             ) if os.environ.get(env_var) is not None else None
-
-
-if __name__ == '__main__':
+def main():
     logging.basicConfig(level=logging.INFO)
 
     # Get organization specific variables from env
@@ -149,10 +176,41 @@ if __name__ == '__main__':
     if env_vars["docker_registry"] != "docker.io":
         env_vars["hostess_docker_registry"] = env_vars["docker_registry"]
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--map-update",
+                        help="Update the imageswap-maps Config Map",
+                        action='store_true')
+    parser.add_argument("--map-check",
+                        help="Check the version of the imageswap-maps Config Map",
+                        action='store_true')
+    args = parser.parse_args()
+
+    if ( args.map_update or args.map_check ) and env_vars["addressing_scheme"] != "services":
+        LOGGER.error(
+            "ERROR: --map-update or --map-check with the '%s' addressing scheme is invalid",
+            env_vars["addressing_scheme"]
+        )
+        sys.exit(1)
+
     operator = MirrorOperator(env_vars)
+
+    if args.map_update:
+        operator.update_imageswap_config()
+        sys.exit()
+
+    if args.map_check:
+        map_current = operator.is_imageswap_config_current()
+        if map_current:
+            sys.exit()
+        else:
+            LOGGER.error("Configmap has been modified not by the mirror operator")
+            sys.exit(1)
 
     sleep_time = os.environ.get("SECONDS_BETWEEN_STREAMS", 30)
     while True:
         operator.watch_registry_mirrors()
         LOGGER.info("API closed connection, sleeping for %i seconds", sleep_time)
         time.sleep(sleep_time)
+
+if __name__ == '__main__':
+    main()

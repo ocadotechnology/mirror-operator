@@ -135,6 +135,8 @@ class RegistryMirror:
                 proxy_set_header              Host {upstream_fqdn};
                 proxy_set_header              X-Real-IP $remote_addr;
                 proxy_set_header              X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_ssl_name                {upstream_fqdn};
+                proxy_ssl_server_name         on;
             }}}}
         }}}}'''.format(registry_cert_dir=REGISTRY_CERT_DIR, cache_dir=CACHE_DIR,
                        cache_size_limit=cache_size_limit,

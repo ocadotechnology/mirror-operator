@@ -4,4 +4,4 @@ COPY . ./app
 WORKDIR /app
 ENV PYTHONPATH "$PYTHONPATH:/app"
 RUN pip install --no-cache -r requirements.txt
-ENTRYPOINT ["python", "mirroroperator/operator.py"]
+CMD ["python", "-u", "mirroroperator/operator.py"]

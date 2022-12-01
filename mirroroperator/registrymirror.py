@@ -56,7 +56,10 @@ class RegistryMirror:
         if kwargs["ss_ds_tolerations"] is not None:
             for t in kwargs["ss_ds_tolerations"]:
                 self.ss_ds_tolerations.append(client.V1Toleration(**t))
-        self.image_pull_secrets = kwargs["image_pull_secrets"] or ""
+        if kwargs["image_pull_secrets"] is not None:
+            self.image_pull_secrets = [{"name": name} for name in kwargs["image_pull_secrets"].split(",")]
+        else:
+            self.image_pull_secrets = None
         self.ca_certificate_bundle = kwargs["ca_certificate_bundle"]
 
         self.volume_claim_spec = client.V1PersistentVolumeClaimSpec(
@@ -322,8 +325,8 @@ class RegistryMirror:
                                     "-u",
                                     "-x"
                                 ],
-                                image="{}/alpine:3.6".format(
-                                    self.hostess_docker_registry),
+                                image="{}/alpine:3.14".format(
+                                    self.docker_registry),
                                 image_pull_policy="IfNotPresent",
                                 resources=client.V1ResourceRequirements(
                                     requests={"memory": "1Mi", "cpu": "0.001"},
@@ -365,8 +368,7 @@ class RegistryMirror:
                     spec=client.V1PodSpec(
                         containers=daemonset_containers,
                         tolerations=self.ss_ds_tolerations,
-                        image_pull_secrets=[{"name": name} for name in
-                                            self.image_pull_secrets.split(",")],
+                        image_pull_secrets=self.image_pull_secrets,
                         service_account_name="mirror-hostess",
                         termination_grace_period_seconds=2,
                         volumes=[client.V1Volume(
@@ -583,7 +585,7 @@ class RegistryMirror:
                         init_containers=[
                             client.V1Container(
                                 name="generate-ca-certs",
-                                image="{}/cloudbees/docker-certificates:1.2".format(
+                                image="{}/cloudbees/docker-certificates:1.3".format(
                                     self.docker_registry),
                                 command=["/bin/sh"],
                                 args=["-c", script],
@@ -613,7 +615,7 @@ class RegistryMirror:
                         containers=[
                             client.V1Container(
                                 name="registry",
-                                image="{}/nginx:1.13.3-alpine".format(
+                                image="{}/nginx:1.22.1-alpine".format(
                                     self.docker_registry),
                                 readiness_probe=client.V1Probe(
                                     http_get=client.V1HTTPGetAction(

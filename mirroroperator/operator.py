@@ -29,7 +29,7 @@ class MirrorOperator:
         """
         :param env_vars: dictionary includes namespace,
             docker_registry (used in RegistryMirror),
-            hostess_docker_registry (used in RegistryMirror, deprecated),
+            hostess_docker_registry (used in RegistryMirror),
             ss_ds_labels (used in RegistryMirror, optional),
             ss_ds_template_lables (used in RegistryMirror, optional)
             ss_ds_tolerations (used in RegistryMirror, optional)
@@ -151,15 +151,13 @@ def main():
         # optional to allow for image to be pulled from elsewhere
         docker_registry=os.environ.get(
             "DOCKER_REGISTRY", "docker.io"),
-        # pylint: disable=fixme
-        # TODO: remove 'hostess_docker_registry' in 1.0.0
         hostess_docker_registry=os.environ.get(
-            "HOSTESS_DOCKER_REGISTRY", "docker.io"),
+            "HOSTESS_DOCKER_REGISTRY", "ghcr.io"),
         addressing_scheme=os.environ.get("ADDRESSING_SCHEME", "hostess"),
         imageswap_namespace=os.environ.get("IMAGESWAP_NAMESPACE", env_namespace),
         hostess_docker_image=os.environ.get("HOSTESS_DOCKER_IMAGE",
                                             "ocadotechnology/mirror-hostess"),
-        hostess_docker_tag=os.environ.get("HOSTESS_DOCKER_TAG", "1.1.0"),
+        hostess_docker_tag=os.environ.get("HOSTESS_DOCKER_TAG", "1.4.0"),
         # optional labels to be added to daemonsets and statefulsets
         ss_ds_labels=safely_eval_env("SS_DS_LABELS"),
         ss_ds_template_labels=safely_eval_env("SS_DS_TEMPLATE_LABELS"),
@@ -172,10 +170,6 @@ def main():
         # get ca certificate
         ca_certificate_bundle=os.environ.get("CA_CERTIFICATE_BUNDLE"),
     )
-    # HOSTESS_DOCKER_REGISTRY is deprecated in favor of DOCKER_REGISTRY
-    if env_vars["docker_registry"] != "docker.io":
-        env_vars["hostess_docker_registry"] = env_vars["docker_registry"]
-
     parser = argparse.ArgumentParser()
     parser.add_argument("--map-update",
                         help="Update the imageswap-maps Config Map",

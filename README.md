@@ -86,10 +86,10 @@ Name | description | default
 `DOCKER_CERTIFICATE_SECRET` | (Required) You **must** provide a certificate to enable TLS between the docker daemon and the registry and create a secret from it, this variable is the name of the secret | None
 `NAMESPACE` | (Optional) The namespace in which the resources should be created. This should be the same namespace as where the container is running | default
 `SECONDS_BETWEEN_STREAMS` | (Optional) Time to sleep between calls to the API. The operator will occasionally lose connection or else fail to run if the Custom Resource Definition does not exist. | 30
-`DOCKER_REGISTRY` | (Optional) The docker registry where Docker images for all containers are to be pulled from. Set it if you have cache/proxy for accessing DockerHub. Overrides HOSTESS_DOCKER_REGISTRY if set to non-default value. | docker.io
-`HOSTESS_DOCKER_REGISTRY` | (Optional) Deprecated, will be removed in version 1.0.0. The docker registry where mirror-hostess and alpine are to be pulled from. | docker.io
+`DOCKER_REGISTRY` | (Optional) The docker registry where Docker images for all containers are to be pulled from. Set it if you have cache/proxy for accessing DockerHub. | docker.io
+`HOSTESS_DOCKER_REGISTRY` | (Optional) The docker registry where mirror-hostess is to be pulled from. | ghcr.io
 `HOSTESS_DOCKER_IMAGE` | (Optional) The name of the docker image for mirror-hostess. | ocadotechnology/mirror-hostess
-`HOSTESS_DOCKER_TAG` | (Optional) The tag for the mirror-hostess docker image. | 1.1.0
+`HOSTESS_DOCKER_TAG` | (Optional) The tag for the mirror-hostess docker image. | 1.4.0
 `ADDRESSING_SCHEME` | (Optional) Select supported addressing scheme | hostess
 `IMAGESWAP_NAMESPACE` | (Optional) The namespace for `imageswap-maps` ConfigMap | the same as `NAMESPACE`
 `SS_DS_LABELS` | (Optional) StatefulSet and DaemonSet labels | None
@@ -100,8 +100,8 @@ Name | description | default
 
 ## Usage
 In order to have the operator deploy a new mirror, the cluster needs to have the custom resource defined:
-```
-apiVersion: apiextensions.k8s.io/v1beta1
+```yaml
+apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   # name must match the spec fields below, and be in the form: <plural>.<group>
@@ -109,8 +109,22 @@ metadata:
 spec:
   # group name to use for REST API: /apis/<group>/<version>
   group: k8s.osp.tech
+  preserveUnknownFields: false
   # version name to use for REST API: /apis/<group>/<version>
-  version: v1
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
+          status:
+            type: object
+            x-kubernetes-preserve-unknown-fields: true
   # either Namespaced or Cluster
   scope: Cluster
   names:
@@ -123,8 +137,8 @@ spec:
     # shortNames allow shorter string to match your resource on the CLI
     shortNames:
     - rm
-
 ```
+TODO: add proper openAPIV3Schema
 
 You can then create new mirrors by providing at minimum an `upstreamUrl` in the spec:
 ```yaml
